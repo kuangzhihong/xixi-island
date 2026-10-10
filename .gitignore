@@ -1,0 +1,9 @@
+# 白名单模式：默认忽略根目录下所有内容，只公开应用源码。
+# .workbuddy/ 内含历史备份、提取产物、测试脚本与个人笔记，绝不进公开库。
+/*
+
+!/.gitignore
+!/README.md
+!/xixi-workbench.html
+!/xixi-app/
+!/xixi-app/**

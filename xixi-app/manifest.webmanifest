@@ -1,0 +1,29 @@
+{
+  "name": "茜茜的小岛 · 学习工作台",
+  "short_name": "茜茜小岛",
+  "description": "茜茜专属学习工作台：每日语数英任务、古诗跟读、学习游戏、花园种植物打僵尸、云宠小咪、钻石兑换。数据保存在本机，可导出备份。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "xixi-island-workbench",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#ffe6f3",
+  "theme_color": "#ff7ab8",
+  "categories": ["education", "kids", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "考试", "short_name": "考试", "url": "./index.html#exam", "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "复习", "short_name": "复习", "url": "./index.html#review", "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "今日任务", "short_name": "任务", "url": "./index.html#checkin", "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "花园", "short_name": "花园", "url": "./index.html#garden", "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "学习游戏", "short_name": "游戏", "url": "./index.html#game", "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
