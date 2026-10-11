@@ -584,6 +584,9 @@
   .follow-h{ font-size:12.5px; font-weight:800; color:#b5478f; }
   .follow-btns{ display:flex; gap:8px; flex-wrap:wrap; margin-top:9px; }
   .follow-out{ margin-top:4px; }
+  .follow-myaudio{ margin-top:10px; }
+  .follow-myaudio audio{ width:100%; height:40px; display:block; }
+  .bk-file{ width:100%; font-size:13px; padding:9px; border-radius:12px; border:2px dashed #ffd2e8; background:#fffafd; }
   .follow-msg{ font-size:12.5px; color:var(--sub); margin-top:8px; line-height:1.7; }
   .follow-heard{ font-size:13px; margin:8px 0 4px; color:var(--ink); }
   .follow-heard b{ color:#c9317e; }
@@ -996,7 +999,7 @@ let   DBK=DBK_BASE;                // 当前登录账号的存档键（登录后
 let   DBK_SNAP=DBK+"_snap";        // 自动快照：上一版数据
 let   DBK_SNAP2=DBK+"_snap2";      // 自动快照：上上一版
 let   DBK_TIME=DBK+"_saved";       // 上次保存时间
-const APP_VER="1.9.15";             // App 版本号（备份文件里会写上）
+const APP_VER="1.9.17";             // App 版本号（备份文件里会写上）
 const $=s=>document.querySelector(s);
 
 /* ============================================================
@@ -2082,6 +2085,7 @@ function defaultDB(){
     wrong:[],                     // 错题本 [{q,ans,opts,x,sub,from,ds}]
     sound:true,                   // 🔊 音效开关
     skin:{bg:"pink",icon:"default",frame:"solid"}, // 🎨 皮肤：背景色 / 图标风格 / 框架样式
+    practice:{},                  // 📝 练习存档：{math_oral:{ds,ps,ans,graded,right}, math_think:{ds,qs,idx,ans,review}, math_mul:{ds,end,right}}
     logs:[],
   };
 }
@@ -2105,7 +2109,43 @@ function saveDB(){
   }catch(e){
     /* 存储满 / 无痕模式：内存里的数据仍然可用，只是这次没写进磁盘 */
     try{ console.warn("本地存储写入失败：", e); }catch(_){}
+    try{ if(!window._saveWarned){ window._saveWarned=true; toast("⚠️ 存不下啦！去「我的 → 数据管理」导出备份，或清理浏览器缓存"); } }catch(_){}
   }
+}
+/* 切后台 / 关页面 / 刷新之前，把内存里的进度（含正在做的题）强制落盘 */
+function flushSave(){
+  try{ if(_pracT){ clearTimeout(_pracT); _pracT=0; } }catch(e){}
+  try{ saveDB(); }catch(e){}
+}
+try{
+  window.addEventListener("pagehide",flushSave);
+  window.addEventListener("beforeunload",flushSave);
+  if(document&&document.addEventListener) document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="hidden") flushSave(); });
+}catch(e){}
+/* 存储自检：一眼看清「数据存哪、能不能写、上次什么时候存的」 */
+function storeCheck(){
+  const a=curAcct();
+  let writable=true, sizeTxt="?", n=0;
+  try{ localStorage.setItem("__xixi_probe__","1"); localStorage.removeItem("__xixi_probe__"); }catch(e){ writable=false; }
+  try{ const raw=localStorage.getItem(DBK)||""; sizeTxt=(raw.length/1024).toFixed(1)+" KB"; }catch(e){}
+  try{ n=localStorage.length; }catch(e){}
+  const pr=(db&&db.practice)||{}, pk=Object.keys(pr);
+  const pracTxt=pk.length?pk.map(k=>k+(pr[k]&&pr[k].done?"（已完成）":"（进行中）")).join("、"):"暂无";
+  showModal(`<h3>🩺 存储自检</h3>
+    <div style="font-size:13px;line-height:2">
+      👤 登录账号：<b>${a?esc(a.name):"未登录（数据不会保存！）"}</b><br>
+      🔑 存档键：<code style="font-size:11px">${esc(DBK)}</code><br>
+      💾 本机可写：<b style="color:${writable?"#2fae6f":"#e0567f"}">${writable?"正常 ✓":"失败 ✗（无痕模式 / 存储已满 / 被浏览器限制）"}</b><br>
+      📦 存档大小：${sizeTxt} · 本机共 ${n} 条记录<br>
+      🕒 上次保存：${savedAtText()} · 自动快照：${snapHas(DBK_SNAP)?"已开启 ✓":"暂无"}<br>
+      📝 练习存档：${esc(pracTxt)}
+    </div>
+    <div class="explain">${a
+      ? (writable?"存储正常，打卡和做过的题都存在这台设备上。如果刷新后还是丢，多半是浏览器 / 手机清理了「网站数据」——建议导出备份，并从桌面图标打开。"
+                :"现在写不进去（无痕模式或存储已满）。请先导出备份，再清理浏览器缓存后重试。")
+      : "还没登录哦——登录之后做的题才会被保存。"}</div>
+    <button class="btn btn-green btn-sm" style="width:100%" data-snd="tap" onclick="closeModal();exportData()">💾 立刻导出一份备份</button>
+    <button class="btn btn-grey btn-sm" style="width:100%;margin-top:8px" onclick="closeModal()">关闭</button>`);
 }
 function savedAtText(){
   try{ const t=Number(localStorage.getItem(DBK_TIME)||0); if(!t) return "刚刚";
@@ -2114,23 +2154,90 @@ function savedAtText(){
   }catch(e){ return "刚刚"; }
 }
 function snapHas(k){ try{ return !!localStorage.getItem(k); }catch(e){ return false; } }
-/* 导出：下载一个 JSON 备份文件（可存到网盘/相册，换手机能恢复） */
+/* 导出备份。安卓 / 国产浏览器里 <a download> 经常静默失败（点了没反应），
+   所以不再只走下载，而是给「分享保存 / 直接下载 / 复制文字」三种方式，总有一款能用。 */
+function _bkJSON(){
+  return JSON.stringify({app:"茜茜的小岛", appVer:APP_VER, exportedAt:new Date().toISOString(), db:db},null,1);
+}
+function _bkFile(s,fname){
+  try{ if(!window.File) return null; return new File([s],fname,{type:"application/json"}); }catch(e){ return null; }
+}
 function exportData(){
   let s;
-  try{ s=JSON.stringify({app:"茜茜的小岛", appVer:APP_VER, exportedAt:new Date().toISOString(), db:db},null,1); }
-  catch(e){ toast("导出失败，数据太大了"); return; }
+  try{ s=_bkJSON(); }catch(e){ toast("导出失败，数据太大了"); return; }
+  const fname="茜茜小岛-数据备份-"+today()+".json";
+  window._bk={s:s,f:fname};
+  pushLog("💾 导出数据备份"); saveDB();
+  let canShare=false;
+  try{ const f=_bkFile(s,fname); canShare=!!(f&&navigator.canShare&&navigator.canShare({files:[f]})); }catch(e){ canShare=false; }
+  showModal(`<h3>💾 导出备份</h3>
+    <div class="explain">选一种方式把备份存好，换手机时可以原样恢复。<br>安卓建议用<b>第一个</b>按钮，存到「微信 / 网盘 / 邮件」里最稳。</div>
+    <div style="display:flex;flex-direction:column;gap:9px;margin-top:11px">
+      ${canShare?`<button class="btn btn-green" data-snd="tap" onclick="bkShare()">📤 保存到手机 / 发到微信网盘（推荐）</button>`:""}
+      <button class="btn btn-blue" data-snd="tap" onclick="bkDownload()">⬇️ 直接下载到「下载」文件夹</button>
+      <button class="btn btn-grey" data-snd="tap" onclick="bkCopy()">📋 复制备份文字（万能办法）</button>
+    </div>
+    <button class="btn btn-grey btn-sm" style="width:100%;margin-top:11px" onclick="closeModal()">关闭</button>`);
+}
+function bkShare(){
+  const bk=window._bk; if(!bk) return;
   try{
-    const blob=new Blob([s],{type:"application/json"});
+    const f=_bkFile(bk.s,bk.f);
+    if(f&&navigator.canShare&&navigator.canShare({files:[f]})){
+      navigator.share({files:[f],title:bk.f,text:"茜茜的小岛 · 数据备份 "+today()})
+        .then(()=>toast("💾 已保存好啦～"))
+        .catch(()=>{});
+      return;
+    }
+  }catch(e){}
+  toast("这台手机不支持分享保存，试试「直接下载」或「复制」");
+  bkDownload();
+}
+function bkDownload(){
+  const bk=window._bk; if(!bk) return;
+  try{
+    const blob=new Blob([bk.s],{type:"application/json"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
-    a.href=url; a.download="茜茜小岛-数据备份-"+today()+".json";
+    a.href=url; a.download=bk.f; a.style.position="fixed"; a.style.left="-999px";
     document.body.appendChild(a); a.click();
-    setTimeout(()=>{ try{ URL.revokeObjectURL(url); a.remove(); }catch(e){} },800);
-    pushLog("💾 导出数据备份"); saveDB();
-    toast("💾 备份已保存到「下载 / 文件」里");
-  }catch(e){ toast("这台设备不支持下载，试试用电脑打开备份"); }
+    setTimeout(()=>{ try{ URL.revokeObjectURL(url); a.remove(); }catch(e){} },4000);
+    toast("⬇️ 去「下载 / 文件」里找这个文件～");
+  }catch(e){ toast("这台设备下载不了，用「复制」的办法吧"); bkCopy(); }
 }
-function importClick(){ const el=document.getElementById("impFile"); if(el) el.click(); }
+function bkCopy(){
+  const bk=window._bk; if(!bk) return;
+  showModal(`<h3>📋 复制备份内容</h3>
+    <div class="explain">点下面的框 → <b>长按 → 全选 → 复制</b>，再粘贴到微信收藏 / 备忘录保存。恢复时把这段内容粘回来就行。</div>
+    <textarea id="bkTxt" readonly style="width:100%;height:150px;font-size:11px;margin-top:8px;border-radius:10px;border:2px solid #ffd2e8;padding:8px">${esc(bk.s)}</textarea>
+    <div style="display:flex;gap:8px;margin-top:9px">
+      <button class="btn btn-blue btn-sm" data-snd="tap" onclick="bkClipCopy()">📋 一键复制</button>
+      <button class="btn btn-grey btn-sm" data-snd="tap" onclick="closeModal()">关闭</button>
+    </div>`);
+}
+function bkClipCopy(){
+  const el=document.getElementById("bkTxt"); if(!el) return;
+  const txt=(window._bk&&window._bk.s)||"";
+  try{ el.select(); el.setSelectionRange(0,999999); }catch(e){}
+  try{ if(document.activeElement!==el) el.focus(); }catch(e){}
+  const done=()=>toast("📋 已复制，去粘贴保存吧～");
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(done,()=>{ try{ document.execCommand("copy"); }catch(e){} done(); });
+      return;
+    }
+  }catch(e){}
+  try{ document.execCommand("copy"); done(); }catch(e){ toast("自动复制不了，请长按上面的文字手动复制"); }
+}
+function importClick(){
+  showModal(`<h3>📥 从备份恢复</h3>
+    <div class="explain">选之前导出的备份文件（<b>.json</b>）。<br>如果按按钮没弹出文件选择，就<b>直接点下面那个「选择文件」</b>。</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:11px">
+      <button class="btn btn-blue" data-snd="tap" onclick="document.getElementById('bkFileIn').click()">📂 选择备份文件</button>
+      <input type="file" id="bkFileIn" class="bk-file" accept=".json,application/json,text/plain,*/*" onchange="importData(this)">
+    </div>
+    <button class="btn btn-grey btn-sm" style="width:100%;margin-top:11px" onclick="closeModal()">关闭</button>`);
+}
 function importData(ev){
   const f=(ev&&ev.target&&ev.target.files&&ev.target.files[0])||(ev&&ev.files&&ev.files[0]);
   if(!f) return;
@@ -2224,6 +2331,7 @@ function migrate(d){
   if(!d.vol.cur) d.vol.cur=d.vol.cn||d.vol.math||d.vol.en||"2A";   // 旧数据：三科分册合并为全局册
   if(d.pet && d.pet.name==="咪宝") d.pet.name="小咪";   // 旧数据：猫咪改名
   if(d.pet){ ["hunger","mood","intimacy","energy"].forEach(k=>{ if(typeof d.pet[k]!=="number") d.pet[k]=k==="hunger"||k==="mood"?80:50; }); }
+  if(!d.practice||typeof d.practice!=="object"||Array.isArray(d.practice)) d.practice={};   // v1.9.17 练习存档
   /* v1.9.15：阳光/钻石初始应为 0，只通过做任务获得。把历史存档里「未动过的 starter 礼包余额」清零（仅一次） */
   if(d.balanceReset!==true && d.dia===30 && d.sun===50 && d.earned===30 && d.spent===0){
     d.dia=0; d.sun=0; d.earned=0; d.spent=0; d.balanceReset=true;
@@ -2446,9 +2554,8 @@ function reciteDone(i){
 window._fb=window._fb||{};        // 兼容旧引用
 window._fbTxt={};                 // key -> {t,lang}
 window._fbUrl={};                 // key -> 录音 blob url
-const FB_MAX_SEC=15;             // 跟读录音最长秒数：到时硬停，避免无限录音占内存
-const FB_MAX_MS=FB_MAX_SEC*1000;
-let _fbRec={ key:"", mr:null, stream:null, chunks:[], mime:"", timer:0, cd:0, start:0 };
+/* 录音不设时长上限：一直录到用户自己点「⏹ 停止」为止（界面只显示已录了多久） */
+let _fbRec={ key:"", mr:null, stream:null, chunks:[], mime:"", cd:0, start:0 };
 
 /* 录音格式协商：苹果只认 mp4，安卓认 webm/opus */
 function _pickMime(){
@@ -2489,8 +2596,27 @@ function fbRead(k){
   const inf=window._fbTxt[k]; if(!inf||!inf.t) return;
   if(_fbRec.key===k && _fbRec.mr && _fbRec.mr.state==="recording") fbStop(k);   // 别让录音把示范音也录进去
   speak(String(inf.t).replace(/\n/g,"，"), inf.lang);
+  _ttsWatch(k);
 }
-/* ② 录音：按一下开始、再按一下停止（最多 15 秒自动停，带倒计时） */
+/* 国产安卓机常常「没装语音包 → 朗读完全没声」。这里做温和提醒：
+   2.6 秒内 TTS 一次都没进入 speaking 才提示，避免正常短句被误判。 */
+function _ttsWatch(k){
+  let n=0;
+  try{ if(!window.speechSynthesis||!speechSynthesis.speak) return; }catch(e){ return; }
+  const iv=setInterval(()=>{
+    n+=200;
+    let ok=false;
+    try{ ok=!!(speechSynthesis.speaking||speechSynthesis.pending); }catch(e){}
+    if(ok){ clearInterval(iv); return; }
+    if(n>=2600){ clearInterval(iv); _ttsGuide(k); }
+  },200);
+}
+function _ttsGuide(k){
+  const out=_fbOut(k); if(!out) return;
+  out.innerHTML=`<div class="follow-msg">😢 好像没读出声音。<br>安卓手机请到「<b>设置 → 系统 → 语言和输入法 → 文字转语音(TTS)</b>」装一个语音引擎，并下载<b>中文</b>语音包，回来就能听到啦。<br><span style="color:#b58aa8">也可以在「我的 → 声音自检」里查原因。</span></div>`;
+  sfx("warn");
+}
+/* ② 录音：按一下开始、再按一下停止（不限时，界面只显示已录多久） */
 function fbRecord(k){
   if(_fbRec.key===k && _fbRec.mr && _fbRec.mr.state==="recording"){ fbStop(k); return; }
   if(_fbRec.mr) _fbDrop();          // 有别的录音在跑：先丢掉
@@ -2499,9 +2625,8 @@ function fbRecord(k){
 function _fbDrop(){
   try{ if(_fbRec.mr){ _fbRec.mr.onstop=null; if(_fbRec.mr.state!=="inactive") _fbRec.mr.stop(); } }catch(e){}
   try{ if(_fbRec.stream) _fbRec.stream.getTracks().forEach(t=>t.stop()); }catch(e){}
-  if(_fbRec.timer) clearTimeout(_fbRec.timer);
   if(_fbRec.cd) clearInterval(_fbRec.cd);
-  _fbRec={ key:"", mr:null, stream:null, chunks:[], mime:"", timer:0, cd:0, start:0 };
+  _fbRec={ key:"", mr:null, stream:null, chunks:[], mime:"", cd:0, start:0 };
 }
 function fbBegin(k){
   const inf=window._fbTxt[k]; if(!inf) return;
@@ -2514,27 +2639,22 @@ function fbBegin(k){
   }
   sfx("tap");
   _fbSetBtn(k,"⏹ 停止");
-  if(out) out.innerHTML=`<div class="follow-msg">🎤 正在录音…大声读一遍，读完点「⏹ 停止」<br><span style="color:#b58aa8" id="fbtm-${k}">（最多录 ${FB_MAX_SEC} 秒，会自动停）</span></div>`;
+  if(out) out.innerHTML=`<div class="follow-msg">🎤 正在录音…大声读一遍，读完点「⏹ 停止」<br><span style="color:#b58aa8" id="fbtm-${k}">（已录 0 秒 · 不限时，录多久都行）</span></div>`;
   nav.getUserMedia({audio:true}).then(st=>{
     let mr=null;
     const mime=_pickMime();
     try{ mr = mime ? new MediaRecorder(st,{mimeType:mime}) : new MediaRecorder(st); }
     catch(e){ try{ mr=new MediaRecorder(st); }catch(e2){ mr=null; } }
     if(!mr){ try{ st.getTracks().forEach(t=>t.stop()); }catch(e){} _fbFail(k,"这台设备无法开始录音"); return; }
-    _fbRec={ key:k, mr:mr, stream:st, chunks:[], mime:mime, timer:0, cd:0, start:Date.now() };
-    mr.ondataavailable=e=>{
-      try{ if(e.data&&e.data.size) _fbRec.chunks.push(e.data); }catch(e2){}
-      // 双保险：即便 setTimeout 没触发，累计超时长也硬停
-      if(_fbRec.start && Date.now()-_fbRec.start>=FB_MAX_MS){ try{ if(_fbRec.mr&&_fbRec.mr.state==="recording") fbStop(k); }catch(e){} }
-    };
+    _fbRec={ key:k, mr:mr, stream:st, chunks:[], mime:mime, cd:0, start:Date.now() };
+    mr.ondataavailable=e=>{ try{ if(e.data&&e.data.size) _fbRec.chunks.push(e.data); }catch(e2){} };
     mr.onstop=()=>_fbDone(k);
     try{ mr.start(200); }catch(e){ try{ mr.start(); }catch(e2){ _fbFail(k,"这台设备无法开始录音"); return; } }
-    _fbRec.timer=setTimeout(()=>{ try{ if(_fbRec.mr&&_fbRec.mr.state==="recording") fbStop(k); }catch(e){} },FB_MAX_MS);
-    // 倒计时提示：让用户清楚「录到多久会自动停」
+    // 只显示已录了多久（正计时），不自动停——录完自己点「⏹ 停止」
     _fbRec.cd=setInterval(()=>{
-      const left=Math.max(0, FB_MAX_MS-(Date.now()-_fbRec.start));
+      const sec=Math.floor((Date.now()-_fbRec.start)/1000);
       const el=document.getElementById("fbtm-"+k);
-      if(el) el.textContent=`（还剩 ${Math.ceil(left/1000)} 秒，会自动停）`;
+      if(el) el.textContent=`（已录 ${sec} 秒 · 不限时，读完点「⏹ 停止」）`;
     },250);
   }).catch(err=>{
     const n=(err&&err.name)||"";
@@ -2545,7 +2665,6 @@ function fbBegin(k){
 }
 function fbStop(k){
   if(_fbRec.key!==k) return;
-  if(_fbRec.timer){ clearTimeout(_fbRec.timer); _fbRec.timer=0; }
   if(_fbRec.cd){ clearInterval(_fbRec.cd); _fbRec.cd=0; }
   try{ if(_fbRec.mr&&_fbRec.mr.state!=="inactive") _fbRec.mr.stop(); }catch(e){}
 }
@@ -2572,17 +2691,35 @@ function _fbDone(k){
       <button class="btn btn-blue btn-sm" data-snd="play" onclick="fbRead('${k}')">🔊 听标准读音</button>
       <button class="btn btn-pink btn-sm" data-snd="tap" onclick="fbPlayMine('${k}')">▶ 听我读的</button>
       <button class="btn btn-go btn-sm" data-snd="tap" onclick="fbCompare('${k}')">🔁 跟读对比</button>
-    </div>`;
+    </div>
+    <div class="follow-myaudio"><audio id="fbau-${k}" controls playsinline preload="auto"></audio></div>
+    <div style="font-size:11.5px;color:var(--sub);text-align:center;margin-top:4px">按钮没出声的话，就用上面这条播放器 ▶ 手动听（安卓上最稳）</div>`;
+  /* 安卓常拦程序自动播放：把录音挂到可见播放器上，保证一定能手动播放 */
+  try{ const el=document.getElementById("fbau-"+k); if(el){ el.src=window._fbUrl[k]; el.volume=1; } }catch(e){}
   sfx("ok");
 }
 /* 播自己的录音（苹果若拒绝自动播放，就给一个「点我播放」按钮） */
 function fbPlayMine(k){
-  if(!window._fbUrl[k]){ toast("还没有录音哦～先点「🎤 录音」读一遍吧"); return; }
+  const u=window._fbUrl[k];
+  if(!u){ toast("还没有录音哦～先点「🎤 录音」读一遍吧"); return; }
+  /* ① 优先用界面上那条可见播放器（安卓最稳：自带 UI，点它就是用户手势） */
+  let el=null; try{ el=document.getElementById("fbau-"+k); }catch(e){}
+  if(el){
+    try{
+      if(!el.src||String(el.src).indexOf("blob:")!==0) el.src=u;
+      el.volume=1;
+      try{ el.currentTime=0; }catch(e2){}
+      const p=el.play();
+      if(p&&p.catch) p.catch(()=>_fbNeedTap(k));
+      return;
+    }catch(e){}
+  }
+  /* ② 兜底：Audio 对象 */
   try{
     const a=new Audio();
     a.setAttribute("playsinline","");     // 安卓/微信内置浏览器：不加这句可能只出画面不出声
-    a.preload="auto";
-    a.src=window._fbUrl[k];
+    a.preload="auto"; a.volume=1;
+    a.src=u;
     window._fbAudio=a;                    // 必须保住引用，否则容易被回收导致无声
     a.onended=()=>{ window._fbAudio=null; };
     const p=a.play();
@@ -4052,22 +4189,8 @@ function solutionCard(){
     <button class="btn btn-green btn-sm" ${done?"disabled":""} data-snd="ok" onclick="completeTask('math_solution')">${done?"✅ 今天学过啦":"✅ 我看懂啦"}</button>
   </div>`;
 }
-/* 数学页顶部：今日数学进度 —— 做过的显示「✅ 已完成」，没做的保持空格，并提示还剩几个 */
-function mathProgressCard(){
-  const items=[
-    {k:"math_oral",   t:"口算 10 道"},
-    {k:"math_think",  t:"应用题 10 道"},
-    {k:"math_mul",    t:"乘法 10 分钟"},
-    {k:"math_solution",t:"解题思路 1 题"},
-    {k:"math_pic",    t:"图画学数学"},
-    {k:"math_method", t:"解法学数学"},
-  ];
-  const done=items.filter(x=>isDone(x.k)).length, left=items.length-done;
-  return `<div class="card"><h3>📅 今日数学进度 <span class="tag">${done}/${items.length}</span></h3>
-    <div class="mp-grid">${items.map(x=>`<div class="mp-item ${isDone(x.k)?"on":""}"><b>${isDone(x.k)?"✅ 已完成":"（　）"}</b><span class="mp-t">${x.t}</span></div>`).join("")}</div>
-    <div class="mp-hint">${left?`今天还有 <b>${left}</b> 个没做哟～`:"今天的数学全部完成啦，太棒了！🎉"}</div>
-  </div>`;
-}
+/* 数学页「今日进度」卡：v1.9.17 起按用户要求取消（不再显示「今天还有 N 个没做哟」）。
+   需要恢复的话，在 PAGES.math() 里加回 ${'${mathProgressCard()}'} 即可。 */
 
 
 /* ============================================================
@@ -4282,11 +4405,12 @@ math(){
       <div style="color:var(--sub);font-size:12px;margin-bottom:10px">今天的题目是新鲜的哦！全对或对 9 题以上算完成，错了可以改～</div>
       <button class="btn btn-go btn-sm" onclick="startOral()">✏️ 开始口算</button></div>
     <div class="card"><h3>🧠 应用题·思维提升 · 每日 10 道 ${isDone("math_think")?'<span class="tag done">✓</span>':""}</h3>
-      <button class="btn btn-go btn-sm" onclick="startThink()">✏️ 开始挑战</button></div>
+      <div style="color:var(--sub);font-size:12px;margin-bottom:9px">做到一半可以先点「📌 稍后做」存起来，回来接着做；做完还能一题一题翻着看。</div>
+      <button class="btn btn-go btn-sm" onclick="startThink()">✏️ ${pracGet("math_think")&&!pracGet("math_think").done?"接着做":"开始挑战"}</button>
+      ${pracGet("math_think")&&pracGet("math_think").done?`<button class="btn btn-blue btn-sm" onclick="startThink()">📖 翻阅回顾</button>`:""}</div>
     <div class="card"><h3>⏱️ 乘法学习 10 分钟 ${isDone("math_mul")?'<span class="tag done">✓</span>':""}</h3>
       <div style="color:var(--sub);font-size:12px;margin-bottom:10px">边练边学：答对一道乘法题，计时 10 分钟完成打卡～</div>
       <button class="btn btn-go btn-sm" onclick="startMul()">✏️ 进入乘法练习</button></div>
-    ${mathProgressCard()}
     ${methodCard()}
     <div class="card"><h3>🖼️ 图画学数学 ${isDone("math_pic")?'<span class="tag done">✓</span>':""}</h3>
       <div style="color:var(--sub);font-size:12px;margin-bottom:8px">看 emoji 图画列出算式，选出正确答案（按年级：一年级看图加减、二年级乘除法、高年级周长/大数）。</div>
@@ -4991,6 +5115,7 @@ manage(){
       </div>
       <input type="file" id="impFile" accept=".json,application/json" style="position:fixed;left:-100px;top:-100px;width:1px;height:1px;opacity:0" onchange="importData(this)">
       <div style="font-size:11.5px;color:var(--sub);margin-top:9px">上次保存：${savedAtText()} · 自动快照：${snapHas(DBK_SNAP)?"已开启 ✓":"暂无"}</div>
+      <div style="margin-top:9px"><button class="btn btn-grey btn-sm" data-snd="tap" onclick="storeCheck()">🩺 存储自检（查一查会不会丢）</button></div>
     </div>
     <div class="card"><h3>🛠️ 其他</h3>
       <button class="btn btn-red btn-sm" onclick="resetAll()">清空所有数据，重新开始</button>
@@ -5037,6 +5162,10 @@ manage(){
       <div class="turtle-qrow">
         <input id="turtleQ" class="turtle-input" placeholder="大胆猜一猜，用「是不是……」的句子问我" onkeydown="if(event.key==='Enter')turtleAsk(this.value)"/>
         <button class="btn btn-blue btn-sm" data-snd="tap" onclick="turtleAsk(document.getElementById('turtleQ').value)">提问</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:9px">
+        <button class="btn btn-pink btn-sm" data-snd="tap" onclick="turtleHint()">💡 想不出来？给我一条线索</button>
+        <span style="font-size:11.5px;color:var(--sub)">已拿到 ${T.revealed.length}/${p.clues.length} 条线索</span>
       </div>
     </div>
     ${T.log.length?`<div class="card"><h3>💬 提问记录</h3>
@@ -5967,6 +6096,17 @@ function turtleAskSuggested(i){
   if(T.revealed.indexOf(i)>=0){ toast("这条线索已经出来啦"); return; }
   turtleAsk(p.clues[i].ask);
 }
+/* 实在想不出来？直接要一条线索：一条一条按顺序给，保留推理的乐趣 */
+function turtleHint(){
+  const T=window._turtle; if(!T) return;
+  const p=TURTLE_SOUP[T.idx];
+  let nxt=-1;
+  for(let i=0;i<p.clues.length;i++){ if(T.revealed.indexOf(i)<0){ nxt=i; break; } }
+  if(nxt<0){ toast("线索全都给你啦～在下面说说你的推理吧！"); return; }
+  T.revealed.push(nxt);
+  T.log.push({q:"（我想不出来啦，给我一条线索吧）", a:"🤖 好吧，给你第 "+T.revealed.length+" 条线索～", clue:nxt});
+  sfx("pop"); saveDB(); rerenderTurtle();
+}
 function turtleReveal(){ const T=window._turtle; if(!T) return; T._reveal=true; sfx("pop"); rerenderTurtle(); }
 function turtleDone(){
   if(gameDoneToday("turtle")) return;
@@ -6394,26 +6534,70 @@ function doOutdoor(a){
   else saveDB();
   render();
 }
+/* ---------- 练习存档（v1.9.17） ----------
+   以前「正在做的题」只存在内存里，刷新 / 关掉页面就没了（看起来像进度被清空）。
+   现在答题过程写进 db.practice：随时能接着做，做完回来还能翻阅，不会又是一片空白。
+   只认当天存档（跨天自动换新题）；写入做合并，连续答题不会疯狂写盘。 */
+let _pracT=0;
+function pracSave(){
+  if(_pracT) return;
+  _pracT=setTimeout(()=>{ _pracT=0; try{ saveDB(); }catch(e){} },400);
+}
+function pracGet(k){ const s=(db&&db.practice)?db.practice[k]:null; return (s&&s.ds===today())?s:null; }
+function pracSet(k,obj){ if(!db) return; db.practice=db.practice||{}; obj.ds=today(); db.practice[k]=obj; pracSave(); }
+function pracDrop(k){ if(db&&db.practice){ delete db.practice[k]; try{ saveDB(); }catch(e){} } }
+
 /* 口算 */
 window._oralState=null;
 function startOral(){
-  const ds=today();
-  if(isDone("math_oral")){ toast("今天已经完成口算打卡啦，明天再来！"); return; }
-  const ps=dailyOral(ds);
-  window._oralState={ps,ans:new Array(10).fill("")};
+  const s=pracGet("math_oral");
+  if(s&&s.ps&&s.ps.length){                       // 有当天存档 → 接着做 / 直接看结果
+    window._oralState={ps:s.ps,ans:s.ans||new Array(s.ps.length).fill(""),graded:!!s.graded,right:s.right||0};
+    renderOral(); return;
+  }
+  const ps=dailyOral(today());
+  window._oralState={ps,ans:new Array(ps.length).fill(""),graded:false,right:0};
+  pracSet("math_oral",{ps:ps,ans:window._oralState.ans,graded:false,right:0});
   renderOral();
+}
+function oralInput(i,v){
+  const st=window._oralState; if(!st) return;
+  st.ans[i]=v;
+  const s=pracGet("math_oral"); if(s){ s.ans=st.ans; pracSave(); }
+}
+function oralRedo(){                                // 清空答案重做一遍
+  const st=window._oralState; if(!st) return;
+  st.ans=new Array(st.ps.length).fill(""); st.graded=false; st.right=0;
+  pracSet("math_oral",{ps:st.ps,ans:st.ans,graded:false,right:0});
+  renderOral();
+}
+function oralResultHTML(st){
+  if(!st.graded) return "";
+  const right=st.right||0;
+  return right>=9
+    ? `<div style="text-align:center;padding:10px;font-weight:800;color:#1fa87d">🎉 答对 ${right}/${st.ps.length}，太棒了！</div>`
+    : `<div style="text-align:center;padding:10px;font-weight:800;color:#e0567f">答对 ${right}/${st.ps.length}，红框的改一改，再交一次！</div>`;
 }
 function renderOral(){
   const st=window._oralState;
-  showModal(`<h3>🧮 100 以内口算（10 道）</h3>
+  const passed=st.graded&&(st.right||0)>=9;    // 达标后进入「翻阅」模式：答案留在屏上慢慢看
+  showModal(`<h3>🧮 100 以内口算（${st.ps.length} 道）${st.graded?`<span class="tag done">${passed?"已完成":"已交卷"}</span>`:""}</h3>
+    ${passed?`<div style="color:var(--sub);font-size:12px;margin-bottom:8px">这是你今天交的卷子，随时可以回来翻一翻～</div>`:""}
     <div class="oral-grid">
-      ${st.ps.map((p,i)=>`<div class="oral-item" id="oi${i}">${p.s.replace("+","＋").replace("−","−")} = 
-        <input type="number" inputmode="numeric" value="${st.ans[i]}" oninput="window._oralState.ans[${i}]=this.value"></div>`).join("")}
+      ${st.ps.map((p,i)=>{
+        const ok=parseInt(st.ans[i])===p.ans;
+        const cls=st.graded?(ok?"r":"w"):"";
+        return `<div class="oral-item ${cls}" id="oi${i}">${p.s.replace("+","＋").replace("−","−")} = 
+        ${passed?`<b>${st.ans[i]===""?"（没填）":st.ans[i]}</b>`:`<input type="number" inputmode="numeric" value="${st.ans[i]}" oninput="oralInput(${i},this.value)">`}</div>`;}).join("")}
     </div>
-    <div id="oralResult"></div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn btn-green" style="flex:1" onclick="gradeOral()">✅ 交卷</button>
-      <button class="btn btn-grey" onclick="closeModal()">稍后再做</button>
+    <div id="oralResult">${oralResultHTML(st)}</div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      ${passed
+        ? `<button class="btn btn-blue" style="flex:1" onclick="oralRedo()">🔄 再做一次</button>
+           <button class="btn btn-grey" onclick="closeModal()">收起来</button>`
+        : `<button class="btn btn-green" style="flex:1" onclick="gradeOral()">✅ ${st.graded?"再交一次":"交卷"}</button>
+           ${st.graded?`<button class="btn btn-blue" onclick="oralRedo()">🔄 清空重做</button>`
+                     :`<button class="btn btn-grey" onclick="closeModal()">稍后再做</button>`}`}
     </div>`);
 }
 function gradeOral(){
@@ -6425,34 +6609,61 @@ function gradeOral(){
     const el=document.getElementById("oi"+i);
     if(el){ el.classList.remove("r","w"); el.classList.add(ok?"r":"w"); }
   });
-  const box=document.getElementById("oralResult");
+  st.graded=true; st.right=right;
+  pracSet("math_oral",{ps:st.ps,ans:st.ans,graded:true,right:right});
   if(right>=9){
-    box.innerHTML=`<div style="text-align:center;padding:10px;font-weight:800;color:#1fa87d">🎉 答对 ${right}/10，太棒了！</div>`;
     completeTask("math_oral");
-    setTimeout(closeModal,1400);
+    setTimeout(()=>{ renderOral(); },1400);   // 重绘成「已完成」状态，答案留在屏上可以慢慢看
   } else {
-    box.innerHTML=`<div style="text-align:center;padding:10px;font-weight:800;color:#e0567f">答对 ${right}/10，红框的改一改，再交一次！</div>`;
+    renderOral();                             // 没达标：保留输入框，红框改一改再交
   }
 }
-/* 思维题 */
+/* 思维题 / 应用题（做完可翻阅，中途可「稍后做」） */
 window._thinkState=null;
 function startThink(){
-  if(isDone("math_think")){ toast("今天的思维题完成啦！"); return; }
-  window._thinkState={qs:dailyThink(today()),idx:0,ans:[],graded:false};
+  const s=pracGet("math_think");
+  if(s&&s.qs&&s.qs.length){
+    window._thinkState={qs:s.qs,idx:Math.min(s.idx||0,s.qs.length-1),ans:s.ans||[],done:!!s.done,right:s.right||0};
+    if(window._thinkState.done){ thinkReview(0); return; }   // 已经做完 → 直接进翻阅
+    renderThink(); return;
+  }
+  const qs=dailyThink(today());
+  window._thinkState={qs:qs,idx:0,ans:[],done:false,right:0};
+  pracSet("math_think",{qs:qs,idx:0,ans:[],done:false,right:0});
+  renderThink();
+}
+/* 「稍后做」：做到一半先存起来，关掉页面也不丢，回来接着答 */
+function thinkLater(){
+  const st=window._thinkState;
+  if(!st){ closeModal(); return; }
+  pracSet("math_think",{qs:st.qs,idx:st.idx,ans:st.ans,done:!!st.done,right:st.right||0});
+  try{ saveDB(); }catch(e){}
+  closeModal();
+  toast("📌 存好啦～回来点「开始挑战」接着做");
+}
+function thinkRedo(){
+  const qs=dailyThink(today());
+  window._thinkState={qs:qs,idx:0,ans:[],done:false,right:0};
+  pracSet("math_think",{qs:qs,idx:0,ans:[],done:false,right:0});
   renderThink();
 }
 function renderThink(){
   const st=window._thinkState, q=st.qs[st.idx];
   const sel=st.ans[st.idx];
-  showModal(`<h3>🧠 思维挑战 ${st.idx+1} / ${st.qs.length}</h3>
+  const answered=st.ans.filter(x=>x!==undefined).length;
+  showModal(`<h3>🧠 思维挑战 ${st.idx+1} / ${st.qs.length} <span class="tag">已答 ${answered}</span></h3>
     <div style="font-size:16px;font-weight:700;line-height:1.7;margin-bottom:12px">${q.s}</div>
     ${q.o.map((o,i)=>`<div class="q-opt ${sel===i?'sel':''}" onclick="window._thinkState.ans[${st.idx}]=${i};renderThink()">${String.fromCharCode(65+i)}. ${o}</div>`).join("")}
-    <button class="btn btn-green" style="width:100%" onclick="submitThink()">提交</button>`);
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-green" style="flex:1" onclick="submitThink()">提交</button>
+      <button class="btn btn-grey" onclick="thinkLater()">📌 稍后做</button>
+    </div>`);
 }
 function submitThink(){
   const st=window._thinkState, q=st.qs[st.idx];
   if(st.ans[st.idx]===undefined){ toast("先选一个答案哦"); return; }
   const ok=st.ans[st.idx]===q.a;
+  pracSet("math_think",{qs:st.qs,idx:st.idx,ans:st.ans,done:!!st.done,right:st.right||0});
   showModal(`<h3>第 ${st.idx+1} 题 · ${ok?"✅ 答对啦":"❌ 再想想"}</h3>
     <div style="font-weight:700;margin-bottom:8px">${q.s}</div>
     ${q.o.map((o,i)=>`<div class="q-opt ${i===q.a?'right':(i===st.ans[st.idx]?'wrongp':'')}">${String.fromCharCode(65+i)}. ${o}</div>`).join("")}
@@ -6461,50 +6672,121 @@ function submitThink(){
 }
 function nextThink(){
   const st=window._thinkState;
-  if(st.idx+1<st.qs.length){ st.idx++; renderThink(); return; }
+  if(st.idx+1<st.qs.length){ st.idx++; pracSet("math_think",{qs:st.qs,idx:st.idx,ans:st.ans}); renderThink(); return; }
   const right=st.qs.reduce((n,q,i)=>n+(st.ans[i]===q.a?1:0),0);
+  st.done=true; st.right=right;
+  pracSet("math_think",{qs:st.qs,idx:st.idx,ans:st.ans,done:true,right:right});
   if(right>=8){ completeTask("math_think"); }
   showModal(`<div style="text-align:center;padding:14px">
     <div style="font-size:52px">${right>=8?"🏆":"💪"}</div>
     <h3>答对 ${right} / ${st.qs.length} 题</h3>
     <p style="color:var(--sub);font-size:13px;margin:6px 0 14px">${right>=8?"思维打卡成功！奖励已到账 💎":"答对 8 题就打卡成功，再挑战一次吧！"}</p>
+    <button class="btn btn-blue" style="width:100%;margin-bottom:8px" onclick="thinkReview(0)">📖 翻阅回顾（一题一题看）</button>
+    <button class="btn btn-grey" style="width:100%;margin-bottom:8px" onclick="thinkRedo()">🔄 再做一次</button>
     <button class="btn btn-green" onclick="closeModal()">好的！</button></div>`);
+}
+/* 做完后翻阅：一题一题回看，绿=正确答案，红=当时选的 */
+function thinkReview(i){
+  const st=window._thinkState; if(!st||!st.qs.length) return;
+  if(i<0) i=0; if(i>=st.qs.length) i=st.qs.length-1;
+  const q=st.qs[i], chosen=st.ans[i];
+  const ok=chosen===q.a;
+  showModal(`<h3>📖 翻阅回顾 ${i+1} / ${st.qs.length} <span class="tag">${ok?"✅ 当时答对":"❌ 当时答错"}</span></h3>
+    <div style="font-size:16px;font-weight:700;line-height:1.7;margin-bottom:10px">${q.s}</div>
+    ${q.o.map((o,j)=>`<div class="q-opt ${j===q.a?'right':(j===chosen?'wrongp':'')}">${String.fromCharCode(65+j)}. ${o}</div>`).join("")}
+    <div class="explain">💡 ${q.x}</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-grey" style="flex:1" ${i<=0?"disabled":""} onclick="thinkReview(${i-1})">← 上一题</button>
+      <button class="btn btn-blue" style="flex:1" ${i+1>=st.qs.length?"disabled":""} onclick="thinkReview(${i+1})">下一题 →</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-grey btn-sm" style="flex:1" onclick="thinkRedo()">🔄 再做一次</button>
+      <button class="btn btn-green btn-sm" style="flex:1" onclick="closeModal()">看完啦</button>
+    </div>`);
 }
 /* 乘法 10 分钟 */
 window._mulState=null;
 function startMul(){
-  if(isDone("math_mul")){ toast("今天乘法学习完成啦！"); return; }
-  window._mulState={end:Date.now()+10*60*1000,next:genMulQ()};
+  const s=pracGet("math_mul");
+  if(s&&s.end&&s.end>Date.now()){                 // 当天已在计时 → 接着练（刷新也不丢）
+    window._mulState={end:s.end,next:genMulQ(),right:s.right||0};
+    renderMul(); return;
+  }
+  const end=Date.now()+10*60*1000;
+  window._mulState={end:end,next:genMulQ(),right:0};
+  pracSet("math_mul",{end:end,right:0});
   renderMul();
 }
 function genMulQ(){
   const a=2+Math.floor(Math.random()*8), b=2+Math.floor(Math.random()*8);
   return {a,b,ans:a*b};
 }
-function renderMul(){
-  const st=window._mulState;
+/* 乘法练习：答对后**停住不动**（不再闪一下就自动跳下一题）。
+   倒计时只改标题文字，不再整块重绘——否则选项每秒重排一次、提示文字也会被冲掉。 */
+function _mulTime(st){
   const left=Math.max(0,st.end-Date.now());
-  const mm=Math.floor(left/60000), ss=Math.floor(left%60000/1000);
-  showModal(`<h3>⏱️ 乘法练习 · 剩余 ${mm}:${String(ss).padStart(2,"0")}</h3>
-    <div style="text-align:center;font-size:30px;font-weight:800;margin:16px 0">${st.next.a} × ${st.next.b} = ?</div>
-    <div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px">
-      ${(function(){ const base=[st.next.ans+2,st.next.ans-1,st.next.ans+1,st.next.ans];
-        let mv=base.filter((v,i,a)=>v>=0&&a.indexOf(v)===i);
-        while(mv.length<4) mv.push(mv.length?mv[mv.length-1]+1:0);
-        const sv=shuffleR(mv,rngFor("mul"+(window._mulSeed=(window._mulSeed||0)+1)+"-"+st.next.a+"x"+st.next.b));
-        return sv.map(v=>`<button class="btn btn-blue btn-sm" onclick="mulAnswer(${v},this)" style="min-width:56px">${v}</button>`).join(""); })()}
-    </div>
-    <div id="mulMsg" style="text-align:center;min-height:20px;font-weight:700"></div>
-    ${left<=0?`<button class="btn btn-green" style="width:100%" data-snd="ok" onclick="completeTask('math_mul');closeModal()">✅ 10 分钟完成，打卡！</button>`
+  return left<=0?"0:00":Math.floor(left/60000)+":"+String(Math.floor(left%60000/1000)).padStart(2,"0");
+}
+function renderMul(){
+  if(window._mulTimer){ clearTimeout(window._mulTimer); window._mulTimer=0; }
+  const st=window._mulState; if(!st) return;
+  const left=Math.max(0,st.end-Date.now());
+  /* 选项顺序：每题只算一次并缓存，避免每秒重排 */
+  const key=st.next.a+"x"+st.next.b;
+  if(!st.opts||st.optsKey!==key){
+    const base=[st.next.ans+2,st.next.ans-1,st.next.ans+1,st.next.ans];
+    let mv=base.filter((v,i,a)=>v>=0&&a.indexOf(v)===i);
+    while(mv.length<4) mv.push(mv.length?mv[mv.length-1]+1:0);
+    st.opts=shuffleR(mv,rngFor("mul"+key)); st.optsKey=key;
+  }
+  const foot=`${left<=0?`<button class="btn btn-green" style="width:100%" data-snd="ok" onclick="completeTask('math_mul');closeModal()">✅ 10 分钟完成，打卡！</button>`
     :`<button class="btn btn-grey" style="width:100%" onclick="closeModal()">先收起来</button>`}
-    <div style="text-align:center;color:var(--sub);font-size:12px;margin-top:8px">多答对几题，10 分钟很快就到啦～</div>`);
-  window._mulTimer=setTimeout(()=>{ if(window._mulState) renderMul(); },1000);
+    <div style="text-align:center;color:var(--sub);font-size:12px;margin-top:8px">多答对几题，10 分钟很快就到啦～${st.right?`（今天已答对 ${st.right} 题）`:""}</div>`;
+  if(st.pending){
+    showModal(`<h3 id="mulHead">⏱️ 乘法练习 · 剩余 ${_mulTime(st)}</h3>
+      <div style="text-align:center;font-size:28px;font-weight:800;margin:14px 0">${st.next.a} × ${st.next.b} = ${st.next.ans}</div>
+      <div id="mulMsg" style="text-align:center;min-height:24px;font-weight:800;font-size:17px;color:#2fae6f">✅ 答对啦！慢慢看，不会自动跳走～</div>
+      <button class="btn btn-green" style="width:100%;margin-top:12px" data-snd="tap" onclick="mulNext()">下一题 →</button>
+      ${foot}`);
+  }else{
+    showModal(`<h3 id="mulHead">⏱️ 乘法练习 · 剩余 ${_mulTime(st)}</h3>
+      <div style="text-align:center;font-size:30px;font-weight:800;margin:16px 0">${st.next.a} × ${st.next.b} = ?</div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px">
+        ${st.opts.map(v=>`<button class="btn btn-blue btn-sm" onclick="mulAnswer(${v},this)" style="min-width:56px">${v}</button>`).join("")}
+      </div>
+      <div id="mulMsg" style="text-align:center;min-height:20px;font-weight:700;${st.bad?"color:#e0648a":""}">${esc(st.msg||"")}</div>
+      ${foot}`);
+  }
+  if(left>0) _mulTick();
+}
+/* 只刷新标题里的倒计时，不整块重画 */
+function _mulTick(){
+  const st=window._mulState; if(!st) return;
+  const left=Math.max(0,st.end-Date.now());
+  const h=document.getElementById("mulHead");
+  if(h) h.textContent=`⏱️ 乘法练习 · 剩余 ${_mulTime(st)}`;
+  if(left<=0){ if(window._mulTimer){clearTimeout(window._mulTimer);window._mulTimer=0;} renderMul(); return; }
+  window._mulTimer=setTimeout(_mulTick,1000);
+}
+function mulNext(){
+  const st=window._mulState; if(!st) return;
+  st.pending=false; st.msg=""; st.bad=false; st.opts=null; st.optsKey=""; st.next=genMulQ();
+  sfx("tap"); renderMul();
 }
 function mulAnswer(v,btn){
-  const st=window._mulState;
-  if(v===st.next.ans){ document.getElementById("mulMsg").textContent="✅ 对啦！"+st.next.a+"×"+st.next.b+"="+st.next.ans;
-    speak("Good job!","en-US"); st.next=genMulQ(); setTimeout(renderMul,600); }
-  else { btn.classList.add("shake"); document.getElementById("mulMsg").textContent="再想一想哦～"; }
+  const st=window._mulState; if(!st||st.pending) return;
+  if(v===st.next.ans){
+    st.pending=true; st.msg=""; st.bad=false;
+    st.right=(st.right||0)+1;
+    pracSet("math_mul",{end:st.end,right:st.right});
+    sfx("ok"); speak("Good job!","en-US");
+    renderMul();                        // 静态展示答案，等孩子自己点「下一题」
+  }else{
+    btn.classList.add("shake");
+    st.msg="再想一想哦～"; st.bad=true;
+    const m=document.getElementById("mulMsg");
+    if(m){ m.textContent=st.msg; m.style.color="#e0648a"; }
+  }
 }
 /* 阅读理解 */
 window._readState=null;

@@ -2,7 +2,7 @@
    - 站点自身文件：先走网络（保证拿到新版本），网络不行就用缓存
    - 外站资源（B 站视频、图片等）：不插手，交给浏览器
    - 新版本发布后：自动接管并提示刷新 */
-const CACHE = "xixi-island-v29";
+const CACHE = "xixi-island-v32";
 const SHELL = [
   "./",
   "./index.html",
