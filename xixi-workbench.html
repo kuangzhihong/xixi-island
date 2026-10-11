@@ -999,7 +999,7 @@ let   DBK=DBK_BASE;                // 当前登录账号的存档键（登录后
 let   DBK_SNAP=DBK+"_snap";        // 自动快照：上一版数据
 let   DBK_SNAP2=DBK+"_snap2";      // 自动快照：上上一版
 let   DBK_TIME=DBK+"_saved";       // 上次保存时间
-const APP_VER="1.9.17";             // App 版本号（备份文件里会写上）
+const APP_VER="1.9.18";             // App 版本号（备份文件里会写上）
 const $=s=>document.querySelector(s);
 
 /* ============================================================
@@ -1191,13 +1191,13 @@ function sfx(type){
       try{ o.start(t0+at); o.stop(t0+at+dur+0.03); }catch(e){}
     };
     switch(type){
-      case "play": [523,659,784,1046].forEach((f,i)=>note(f,i*0.055,0.20,0.075,"sine")); break;
-      case "ok":   [659,880,1174].forEach((f,i)=>note(f,i*0.07,0.18,0.085,"triangle")); break;
-      case "coin": note(1046,0,0.09,0.08,"square"); note(1568,0.07,0.22,0.06,"square"); break;
-      case "eat":  note(200,0,0.13,0.10,"square"); note(130,0.10,0.22,0.09,"square"); break;
-      case "warn": note(330,0,0.18,0.09,"sawtooth"); note(235,0.13,0.26,0.07,"sawtooth"); break;
-      case "pop":  note(880,0,0.10,0.09,"triangle"); break;
-      default:     note(1180,0,0.07,0.05,"triangle"); note(1560,0.035,0.07,0.035,"sine");
+      case "play": [523,659,784,1046].forEach((f,i)=>note(f,i*0.055,0.20,0.11,"sine")); break;
+      case "ok":   [659,880,1174].forEach((f,i)=>note(f,i*0.07,0.18,0.12,"triangle")); break;
+      case "coin": note(1046,0,0.09,0.10,"square"); note(1568,0.07,0.22,0.08,"square"); break;
+      case "eat":  note(200,0,0.13,0.13,"square"); note(130,0.10,0.22,0.11,"square"); break;
+      case "warn": note(330,0,0.18,0.12,"sawtooth"); note(235,0.13,0.26,0.10,"sawtooth"); break;
+      case "pop":  note(880,0,0.10,0.11,"triangle"); break;
+      default:     note(1180,0,0.07,0.08,"triangle"); note(1560,0.035,0.07,0.05,"sine");
     }
   };
   if(c.state==="running"){ play(); return; }
@@ -1234,9 +1234,12 @@ function audioTest(kind){
     msg="⑤ 设备诊断：运行环境 "+env+"；网页方式 "+(proto==="https:"?"安全网页(https)":(proto==="http:"?"普通网页":"本地文件，麦克风会不可用"))+"；音效通道「"+acState+"」；语音包共 "+vs.length+" 个（中文 "+zhN+" / 英文 "+enN+"）。";
     if(!hasAC) msg+=" ⚠ 这台设备的浏览器不支持音效，只能听朗读。";
     else if(acState!=="running") msg+=" 音效通道还没点亮：先随便点一个按钮，再回来点「①音效」试试。";
+    else msg+=" 音效通道已就绪，若仍没声音，几乎都是手机「媒体音量」被调到 0（红米音量键默认调的是铃声），或顶栏是 🔇、开了勿扰模式。";
     if(!hasSpeak) msg+=" ⚠ 系统没有语音朗读能力，请安装一个中文语音包（如系统设置里的「文字转语音」/Google 语音服务）。";
     else if(zhN===0) msg+=" ⚠ 系统里没有中文语音包，中文朗读会没声音。";
     else if(enN===0) msg+=" ⚠ 系统里没有英文语音包，英文朗读会没声音，不影响中文。";
+    const isXiaomi=/Xiaomi|Redmi|MIUI|HyperOS|POCO/i.test(ua);
+    if(isXiaomi) msg+=" 📱 红米/小米特别注意：按侧边音量键默认调的是「铃声」不是「媒体」！播放时按音量键，看屏幕顶部是否出现「媒体」音量条、把它拉到最大；或在「设置→声音与振动→音量」里把媒体音量拉满。通道是 running 却听不到，99% 是媒体音量为 0。";
   }
   if(out) out.textContent=msg;
   return msg;
@@ -1290,24 +1293,44 @@ function speak(text,lang){
   const chunks=splitSpeak(text).filter(s=>s && s.trim());
   if(!chunks.length) return false;
   unlockAudio();                                  // 顺手把 WebAudio 通道也点亮
+  warmVoices();
+  const want=String(L).slice(0,2).toLowerCase();
+  const vs=(_CACHED_VOICES.length?_CACHED_VOICES:(S.getVoices?S.getVoices():[]))||[];
+  const zhN=vs.filter(v=>String(v.lang||"").toLowerCase().indexOf("zh")===0).length;
+  // 安卓常见：系统里根本没装中文语音包 → 朗读整句静默。提前一次性提示，少让用户懵。
+  if(want==="zh" && zhN===0 && !window._ttsNoZhTold){
+    window._ttsNoZhTold=true;
+    toast("📢 系统好像没有「中文语音包」。请到 设置→系统→语言与输入法→文字转语音(TTS)，装一个中文引擎（如 Google 文字转语音 / 讯飞），回来就能听朗读啦。");
+  }
   try{ S.cancel(); }catch(e){}
-  try{ if(S.resume) S.resume(); }catch(e){}        // 安卓已知 bug：引擎停在 paused 时 speak 无声
+  let started=false;
   const fire=()=>{
     try{
-      const v=pickVoice(L);
+      // 找不到精确语音包时退而求其次用第一个可用语音，避免整句静默（中文塞英文语音只是变调，不会没声）
+      const v=pickVoice(L) || (vs.length?vs[0]:null);
       chunks.forEach(ch=>{
         const u=new SpeechSynthesisUtterance(ch);
         u.lang=L; u.rate=0.9; u.pitch=1.1; u.volume=1;
         if(v) u.voice=v;
-        try{ S.speak(u); }catch(e){}
+        try{ S.speak(u); started=true; }catch(e){}
       });
     }catch(e){}
+    // 通用「没出声」看门狗：2.8 秒内一次都没进入 speaking，就提示（红米多为媒体音量没开）
+    setTimeout(()=>{
+      let ok=false; try{ ok=!!(S.speaking||S.pending); }catch(e){}
+      if(!ok) toast("📢 没听到朗读声？红米/安卓请先把「媒体音量」调大（按音量键看屏幕是否出现「媒体」条，不是「铃声」）；或到「我的→声音自检」点⑤查原因。");
+    },2800);
   };
-  // 首次调用时安卓的语音包列表通常还是空的，先等它加载一下，否则第一句会被吞掉
+  // 安卓已知 bug：引擎停在 paused 时 speak 无声 → 先 resume，等它就绪再读（首次调用语音包常还是空的，多等一下）
   const needWait=_CACHED_VOICES.length===0;
-  warmVoices();
-  _speakDelay=needWait?280:130;
-  setTimeout(fire, _speakDelay);
+  _speakDelay=needWait?320:130;
+  try{
+    if(S.resume){
+      const r=S.resume();
+      const go=()=>{ if(needWait) setTimeout(fire,_speakDelay); else fire(); };
+      if(r&&r.then) r.then(go).catch(go); else go();
+    } else { if(needWait) setTimeout(fire,_speakDelay); else fire(); }
+  }catch(e){ fire(); }
   return true;
 }
 /* 解锁音频：第一次触摸/点击就点亮通道（iOS / 安卓 / 微信内置浏览器都要求手势里解锁）。
@@ -2582,7 +2605,8 @@ function followInner(key,title){
       <button class="btn btn-pink btn-sm" data-snd="tap" id="fbrc-${key}" onclick="fbRecord('${key}')">🎤 录音</button>
       <button class="btn btn-grey btn-sm" data-snd="tap" onclick="fbCompare('${key}')">🔁 跟读对比</button>
     </div>
-    <div class="follow-out" id="fbout-${key}"></div>`;
+    <div class="follow-out" id="fbout-${key}"></div>
+    <div style="font-size:11px;color:var(--sub);margin-top:6px;text-align:center">📱 安卓/红米听不到声音：请按侧边音量键，确认出现的是「媒体」音量条并拉到最大（默认调的是铃声）。</div>`;
 }
 function followBox(key,text,title){
   window._fb[key]=String(text||"");
