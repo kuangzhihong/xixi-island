@@ -999,7 +999,7 @@ let   DBK=DBK_BASE;                // 当前登录账号的存档键（登录后
 let   DBK_SNAP=DBK+"_snap";        // 自动快照：上一版数据
 let   DBK_SNAP2=DBK+"_snap2";      // 自动快照：上上一版
 let   DBK_TIME=DBK+"_saved";       // 上次保存时间
-const APP_VER="1.9.19";             // App 版本号（备份文件里会写上）
+const APP_VER="1.9.20";             // App 版本号（备份文件里会写上）
 const $=s=>document.querySelector(s);
 
 /* ============================================================
@@ -2418,6 +2418,21 @@ function completeTask(id){
   if(doneCount(ds)>=NIGHT_MIN_TASKS && nightRescue()) setTimeout(()=>toast("💪 太棒了！僵尸被你吓跑啦！"),1300);
   saveDB(); renderTopbar(); render();
 }
+/* 撤销打卡：反向扣回奖励；若之前已发全勤奖励、现在不满了就一并收回 */
+function uncompleteTask(id){
+  const t=allTasks().find(x=>x.id===id); if(!t) return;
+  const ds=today(); const c=db.completions[ds]; if(!c||!c[id]) return;
+  delete c[id];
+  db.dia=Math.max(0,db.dia-t.dia); db.earned=Math.max(0,db.earned-t.dia); db.sun=Math.max(0,db.sun-t.sun);
+  pushLog(`撤销「${taskName(t)}」-${(t.dia||0)}💎 -${(t.sun||0)}☀️`);
+  if(c._bonus && !isAllDone(ds)){
+    delete c._bonus;
+    db.dia=Math.max(0,db.dia-20); db.earned=Math.max(0,db.earned-20); db.sun=Math.max(0,db.sun-30);
+    pushLog("收回全勤奖励 -20💎 -30☀️");
+  }
+  saveDB(); renderTopbar(); render();
+  toast("↩️ 已撤销打卡");
+}
 function pushLog(s){ db.logs.unshift({t:Date.now(),s}); db.logs=db.logs.slice(0,60); }
 function streak(){
   let s=0; const d=new Date();
@@ -3014,13 +3029,14 @@ function askConfirm(msg, onYes, yesLabel){
 }
 function askYes(){ const f=window._askYes; window._askYes=null; closeModal(); if(typeof f==="function") f(); }
 function showAlert(msg){ showModal(`<h3>${esc(String(msg).split("\n")[0])}</h3>${String(msg).split("\n").slice(1).map(l=>`<div style="font-size:12.5px;color:var(--sub);margin:6px 0">${esc(l)}</div>`).join("")}<div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-go btn-sm" data-snd="tap" onclick="closeModal()">知道啦</button></div>`); }
-function taskIconRow(t,goPage){
+function taskIconRow(t){
   const done=isDone(t.id);
-  return `<div class="task-row ${done?'done':''}" onclick="${goPage?`go('${goPage}')`:''}" style="cursor:pointer">
+  return `<div class="task-row ${done?'done':''}">
     <span class="ti">${icoOf(t.icon)}</span>
     <div class="tmid"><div class="tnm">${taskName(t)}</div>
       <div class="trw">+${t.dia}💎 +${t.sun}☀️ ${done?'· ✅ 已打卡':''}</div></div>
-    ${done?'<span class="tag done">✓</span>':'<span class="btn btn-go btn-sm">去完成</span>'}
+    ${done?`<span class="tag done">✓ 已打卡</span><button class="btn btn-grey btn-sm" data-snd="tap" onclick="uncompleteTask('${t.id}')">撤销</button>`
+          :`<button class="btn btn-go btn-sm" data-snd="ok" onclick="completeTask('${t.id}')">✅ 完成</button>`}
   </div>`;
 }
 
@@ -3805,12 +3821,12 @@ function render(){ nightCheck(); applySkin(); renderTopbar(); const f=PAGES[page
 function todayPanel(){
   const ds=today();
   const groups=["cn","math","en","sci","moral","life","custom"];
-  const sec=groups.map(g=>{
+    const sec=groups.map(g=>{
     const list=allTasks().filter(t=>t.g===g); if(!list.length) return "";
     const dn=list.filter(t=>isDone(t.id)).length;
     return `<div class="card">
       <h3><span style="color:${GROUPS[g].c}">■</span> ${GROUPS[g].n}任务 <span class="tag">${dn}/${list.length}</span></h3>
-      ${list.map(t=>taskIconRow(t,{cn:"cn",math:"math",en:"en",sci:"science",moral:"moral"}[t.g]||"manage")).join("")}
+      ${list.map(t=>taskIconRow(t)).join("")}
     </div>`;
   }).join("");
   const out=outdoorOut(ds);
@@ -5014,14 +5030,34 @@ shop(){
           <button class="btn btn-green btn-sm" onclick="confirmRedeem(${r.id})">✓ 妈妈已兑现</button></div>`).join("")
       :`<div class="empty">还没有兑换记录，攒攒钻石换喜欢的奖励吧～</div>`}
     </div>
-    <div class="card"><h3>🎁 兑换小铺</h3>
+    <div class="card"><h3>🎁 兑换小铺 <span style="float:right;font-weight:400;font-size:11px;color:var(--sub)">点 🗑 可删除</span></h3>
       <div class="cat-tabs">${cats.map(c=>`<button class="chip ${c===cat?'on':''}" onclick="window._shopCat='${c}';render()">${{全部:"✨",美食:"😋",玩具文具:"🧸",玩乐:"🎮"}[c]} ${c}</button>`).join("")}</div>
-      ${list.map(r=>`
+      ${list.length?list.map(r=>`
         <div class="task-row"><span class="ti">${r.em}</span>
           <div class="tmid"><div class="tnm">${r.name}</div>
             <div class="trw">${r.cat} · ${r.cost}💎${db.dia>=r.cost?" · 可以兑换啦！":" · 还差 "+Math.max(0,r.cost-db.dia)+"💎"}</div>
             <div class="minipro"><i style="width:${Math.min(100,Math.round(db.dia/r.cost*100))}%"></i></div></div>
-          <button class="btn ${db.dia>=r.cost?'btn-pink':'btn-grey'} btn-sm" ${db.dia>=r.cost?'':'disabled'} onclick="redeem(${r.id})">兑换</button></div>`).join("")}
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn ${db.dia>=r.cost?'btn-pink':'btn-grey'} btn-sm" ${db.dia>=r.cost?'':'disabled'} onclick="redeem(${r.id})">兑换</button>
+            <button class="xbtn" data-snd="tap" onclick="delReward(${r.id})" title="删除这个奖励">🗑</button>
+          </div>
+        </div>`).join(""):`<div class="empty">这个分类下还没有奖励，用下面的「＋ 添加奖励」加一个吧～</div>`}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px">
+        <input id="srEm" placeholder="图标(如 🍦)" value="🎁">
+        <input id="srName" placeholder="奖励名称">
+        <input id="srCost" type="number" placeholder="💎 价格">
+        <select id="srCat">
+          <option value="美食">美食</option><option value="玩具文具">玩具文具</option><option value="玩乐">玩乐</option>
+        </select>
+      </div>
+      <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="addReward(document.getElementById('srEm').value,document.getElementById('srName').value,document.getElementById('srCost').value,document.getElementById('srCat').value)">＋ 添加奖励</button>
+    </div>
+    <div class="card"><h3>🧾 兑换记录 <span class="tag">${db.redemptions.length}</span></h3>
+      ${db.redemptions.length?db.redemptions.map(r=>`<div class="task-row"><span class="ti">${r.em}</span>
+        <div class="tmid"><div class="tnm">${r.name}</div>
+          <div class="trw">${r.cost}💎 · ${new Date(r.at).getMonth()+1}月${new Date(r.at).getDate()}日 ${r.status==='done'?'<span class="tag done">已兑现</span>':'<span class="tag wait">待兑现</span>'}</div></div>
+        <button class="xbtn" data-snd="tap" onclick="delRedemption(${r.id})" title="删除这条记录">✕</button></div>`).join("")
+      :'<div class="empty">还没有兑换记录，攒攒钻石去换喜欢的奖励吧～</div>'}
     </div>`;
 },
 checkin(){
@@ -5055,6 +5091,7 @@ checkin(){
       </div>
       <div class="cal-grid">${cells}</div>
       <div style="font-size:11.5px;color:var(--sub);margin-top:10px">格子里的数字 = 当天完成的任务条数（含家务、锻炼）</div></div>
+    <div class="addbar" style="margin-top:12px" onclick="showCustomAdd()">＋ 添加我的打卡任务</div>
     <div class="card"><h3>🧹 本月家务 · 🏃‍♀️ 锻炼</h3>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center">
         <div><div style="font-size:20px;font-weight:800;color:#e8a200">${mCh}</div><div style="font-size:11px;color:var(--sub)">家务次数</div></div>
@@ -5140,7 +5177,7 @@ manage(){
         <input id="rwName" placeholder="奖励名称">
         <input id="rwCost" type="number" placeholder="💎 价格">
       </div>
-      <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="addReward()">＋ 添加奖励</button>
+      <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="addReward('🎁',document.getElementById('rwName').value,document.getElementById('rwCost').value,'玩乐')">＋ 添加奖励</button>
     </div>
     <div class="card"><h3>📲 装到手机上（像 App 一样）</h3>
       <div style="font-size:13px;line-height:1.95;color:var(--ink)">
@@ -7268,16 +7305,40 @@ function delCustom(id){
     saveDB(); render(); toast("已删除");
   }, "删除");
 }
-function addReward(){
-  const name=document.getElementById("rwName").value.trim();
-  const cost=parseInt(document.getElementById("rwCost").value);
+/* 打卡页快速添加自定义任务（用独立 ID，避免和「我的→任务管理」的输入框冲突） */
+function showCustomAdd(){
+  showModal(`<h3>➕ 添加我的打卡任务</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+      <input id="caIcon" placeholder="图标(如 🎹)" value="🌟">
+      <input id="caName" placeholder="任务名称(如 练钢琴20分钟)">
+      <input id="caDia" type="number" placeholder="💎奖励" value="5">
+      <input id="caSun" type="number" placeholder="☀️奖励" value="10">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">
+      <button class="btn btn-grey btn-sm" data-snd="tap" onclick="closeModal()">取消</button>
+      <button class="btn btn-green btn-sm" data-snd="ok" onclick="addCustomFromCard()">添加</button>
+    </div>`);
+}
+function addCustomFromCard(){
+  const name=(document.getElementById("caName")||{}).value||"";
+  if(!name.trim()){ toast("写个任务名称哦"); return; }
+  db.custom.push({id:"c"+Date.now(),g:"custom",icon:(document.getElementById("caIcon")||{}).value.trim()||"🌟",
+    name:name.trim(),dia:parseInt((document.getElementById("caDia")||{}).value)||5,sun:parseInt((document.getElementById("caSun")||{}).value)||10});
+  saveDB(); renderTopbar(); render(); closeModal(); toast("✅ 任务已添加！");
+}
+function addReward(em,name,cost,cat){
+  name=(name||"").trim(); cost=parseInt(cost);
   if(!name||!cost){ toast("填好名称和价格哦"); return; }
-  db.rewards.push({id:db.nextRid++,em:"🎁",name,cost,cat:"玩乐"});
-  saveDB(); render();
+  db.rewards.push({id:db.nextRid++,em:em||"🎁",name,cost,cat:cat||"玩乐"});
+  saveDB(); render(); toast("🎁 奖励已添加！");
 }
 function delReward(id){
   db.rewards=db.rewards.filter(r=>r.id!==id);
   saveDB(); render();
+}
+function delRedemption(id){
+  db.redemptions=db.redemptions.filter(r=>r.id!==id);
+  saveDB(); render(); toast("已删除该兑换记录");
 }
 function resetAll(){
   const _me=curAcct();
