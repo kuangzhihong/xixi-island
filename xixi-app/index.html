@@ -786,6 +786,9 @@
   .ml-front input:focus{ border-color:#ef8fc0; box-shadow:0 0 0 3px #ffd9ec; }
   .ml-front .auth-field{ margin-bottom:9px; }
   .ml-front .auth-field label{ color:#b5478f; }
+  .auth-err .auth-lnk{ display:inline-block; margin:2px 0 0 6px; background:#fff; border:1.5px solid #ff8fc0; color:#c2255c;
+    font-weight:800; font-size:12px; border-radius:9px; padding:3px 9px; cursor:pointer; font-family:inherit; box-shadow:0 2px 0 #ffd6e8; }
+  .auth-err .auth-lnk:active{ transform:translateY(2px); box-shadow:none; }
   .auth-err:empty{ display:none; }
   .auth-legacy{ background:#fff8e6; border:2px dashed #ffd98a; border-radius:10px; padding:8px 10px;
     font-size:11.5px; color:#a1701a; margin-bottom:10px; line-height:1.7; }
@@ -1033,7 +1036,7 @@ let   DBK=DBK_BASE;                // 当前登录账号的存档键（登录后
 let   DBK_SNAP=DBK+"_snap";        // 自动快照：上一版数据
 let   DBK_SNAP2=DBK+"_snap2";      // 自动快照：上上一版
 let   DBK_TIME=DBK+"_saved";       // 上次保存时间
-const APP_VER="1.9.22";             // App 版本号（备份文件里会写上）
+const APP_VER="1.9.23";             // App 版本号（备份文件里会写上）
 const $=s=>document.querySelector(s);
 
 /* ============================================================
@@ -2201,8 +2204,12 @@ function flushSave(){
 try{
   window.addEventListener("pagehide",flushSave);
   window.addEventListener("beforeunload",flushSave);
+  try{ window.addEventListener("freeze",flushSave); }catch(e){}   // 手机切后台被系统冻结时也能落盘
   if(document&&document.addEventListener) document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="hidden") flushSave(); });
 }catch(e){}
+/* ⏱ 定时自动保存兜底：即使某个操作漏了 saveDB，最多 6 秒也写进本机（v1.9.23）。
+   移动端 beforeunload 常不可靠，这是防「刷新数据不见了」的关键一环。 */
+setInterval(function(){ try{ if(ACCT.cur&&db) saveDB(); }catch(e){} },6000);
 /* 存储自检：一眼看清「数据存哪、能不能写、上次什么时候存的」 */
 function storeCheck(){
   const a=curAcct();
@@ -2219,6 +2226,7 @@ function storeCheck(){
       💾 本机可写：<b style="color:${writable?"#2fae6f":"#e0567f"}">${writable?"正常 ✓":"失败 ✗（无痕模式 / 存储已满 / 被浏览器限制）"}</b><br>
       📦 存档大小：${sizeTxt} · 本机共 ${n} 条记录<br>
       🕒 上次保存：${savedAtText()} · 自动快照：${snapHas(DBK_SNAP)?"已开启 ✓":"暂无"}<br>
+      ⏱ 自动保存：每 6 秒 + 关闭/切后台时都会写进本机<br>
       📝 练习存档：${esc(pracTxt)}
     </div>
     <div class="explain">${a
@@ -5132,9 +5140,9 @@ cat(){
       <div class="pet-room ${asleep?"night":""}" id="petRoom">
         ${asleep?'<span class="pet-stars">🌙 ✨</span>':'<span class="pet-sun">☀️</span>'}
         <span class="pet-floor"></span>
-        <div class="pet-bowl" id="petBowlFood" onclick="petScroll('.pet-shop')" title="食物盆：去小铺买食物">🍚<span class="bn">食物 ${foodN}</span></div>
-        <div class="pet-bowl" id="petBowlWater" onclick="petScroll('.pet-shop')" title="水盆：去小铺买水">🥛<span class="bn">水 ${waterN}</span></div>
-        <div class="pet-bowl ${pottyDirty>=2?"dirty":""}" id="petBowlPotty" onclick="petCleanPotty()" title="尿屎盆：点我清理">🚽<span class="bn">${pottyDirty?("💩"+potty.poop+" 💧"+potty.pee):"干净"}</span></div>
+        <div class="pet-bowl" id="petBowlFood" onclick="petBowlOpen('food')" title="食物盆：点开背包喂它">🍚<span class="bn">食物 ${foodN}</span></div>
+        <div class="pet-bowl" id="petBowlWater" onclick="petBowlOpen('water')" title="水盆：点开背包喂它">🥛<span class="bn">水 ${waterN}</span></div>
+        <div class="pet-bowl ${pottyDirty>=2?"dirty":""}" id="petBowlPotty" onclick="petBowlOpen('potty')" title="尿屎盆：点开背包用尿垫清理">🚽<span class="bn">${pottyDirty?("💩"+potty.poop+" 💧"+potty.pee):"干净"}</span></div>
         <div class="pet-happy" id="petHappy"><img id="petHappyImg" alt="撒娇卖萌"><span class="cap">💕 撒娇卖萌中</span></div>
         <div class="pet-bubble" id="petSay">${bb?(bb[0]+" "+bb[1]):""}</div>
         ${asleep?'<div class="pet-zzz">💤</div>':""}
@@ -7236,6 +7244,33 @@ function petSlot(id){
   askConfirm("领养 "+t.name+"「"+t.nick+"」需要 ☀️"+PET_ADOPT_PRICE+"，确定领养吗？", ()=>adoptPet(id));
 }
 function petScroll(sel){ try{ const el=document.querySelector(sel); if(el&&el.scrollIntoView) el.scrollIntoView({behavior:"smooth",block:"start"}); }catch(e){} }
+/* 点食盆/水盆/尿盆 → 弹出背包里对应类别的东西，点一下就用（v1.9.23） */
+function petBowlOpen(kind){
+  const p=petState(); if(!p){ toast("先领养一只小宠物吧～"); return; }
+  const t=petType(db.pet.petId)||PET_TYPES[0], bag=p.bag||{};
+  let title,items=[],kindName;
+  if(kind==="food"){
+    kindName="食物"; title="🍚 给"+esc(p.name)+"吃什么？";
+    items=t.foods.filter(f=>(bag[f.id]||0)>0).map(f=>({em:f.em,name:f.name,n:bag[f.id]||0,fn:"feedPet('food','"+f.id+"')"}));
+  }else if(kind==="water"){
+    kindName="水"; title="🥛 给"+esc(p.name)+"喝什么？";
+    items=t.waters.filter(f=>(bag[f.id]||0)>0).map(f=>({em:f.em,name:f.name,n:bag[f.id]||0,fn:"feedPet('water','"+f.id+"')"}));
+  }else{
+    kindName="尿垫"; title="🚽 清理"+esc(p.name)+"的尿盆";
+    if((bag.litter||0)>0) items=[{em:PET_LITTER.em,name:PET_LITTER.name,n:bag.litter,fn:"petCleanPotty()"}];
+  }
+  const body=items.length
+    ? '<div class="explain">背包里有的，点一下就用～</div><div class="bag-grid" style="margin-top:10px">'
+      +items.map(it=>'<div class="bag-item" data-snd="ok" onclick="closeModal();'+it.fn+'"><div class="be">'+it.em+'</div><div class="bn2">'+esc(it.name)+'</div><div class="bc">×'+it.n+'</div></div>').join("")
+      +'</div>'
+    : '<div class="explain">🎒 背包里还没有'+kindName+'，先去宠物小铺买一个吧～</div>';
+  showModal('<h3>'+title+'</h3>'+body
+    +'<div style="display:flex;gap:10px;margin-top:14px">'
+    +'<button class="btn btn-grey btn-sm" style="flex:1" data-snd="tap" onclick="closeModal()">关闭</button>'
+    +(items.length?'':'<button class="btn btn-go btn-sm" style="flex:1" data-snd="tap" onclick="closeModal();petScroll(\'.pet-shop\')">🛒 去小铺</button>')
+    +'</div>');
+  sfx("tap");
+}
 /* 喂食 / 喂水：从背包消耗（买东西只进背包，点这里才喂进肚子） */
 function petBuyItem(kind,itemId){
   const p=petState(); if(!p){ toast("先领养一只小宠物吧～"); return; }
@@ -8558,10 +8593,16 @@ function showAuthGate(){
 }
 function hideAuthGate(){ const g=$("#authGate"); if(g) g.classList.remove("on"); }
 /* 错误提示只更新错误条，不重建表单（避免把已输入的昵称/密码冲掉） */
+/* 错误条内容：账号不存在/密码错时，直接给一个可点的「去注册 / 去登录」 */
+function authErrHTML(){
+  if(!_authErr) return "";
+  const to=_authView==="reg"?"登 录":"注 册";
+  return "⚠️ "+esc(_authErr)+' <button type="button" class="auth-lnk" data-snd="tap" onclick="mlToggle()">去'+to+' →</button>';
+}
 function authErr(m){
   _authErr=m||"";
   const e=document.getElementById("mlErr");
-  if(e) e.innerHTML=_authErr?("⚠️ "+esc(_authErr)):"";
+  if(e) e.innerHTML=authErrHTML();
   else authRender();
 }
 /* 直接切视图（无动画，兼容旧调用） */
@@ -8726,7 +8767,7 @@ function authLoginHTML(){
   <div class="auth-field"><label>密码</label>
     <input id="lgPass" type="password" placeholder="输入密码" autocomplete="off"
       onkeydown="if(event.key==='Enter')authDoLogin()"></div>
-  <div class="auth-err" id="mlErr">${_authErr?("⚠️ "+esc(_authErr)):""}</div>
+  <div class="auth-err" id="mlErr">${authErrHTML()}</div>
   <button class="btn btn-go auth-btn" data-snd="ok" onclick="authDoLogin()">登 录</button>
   ${wxList.length?`
     <div class="auth-or"><span>或</span></div>
@@ -8752,7 +8793,7 @@ function authRegHTML(){
   <div class="auth-field"><label>确认密码</label>
     <input id="rgPass2" type="password" placeholder="再输一遍" autocomplete="off"
       onkeydown="if(event.key==='Enter')authDoReg()"></div>
-  <div class="auth-err" id="mlErr">${_authErr?("⚠️ "+esc(_authErr)):""}</div>
+  <div class="auth-err" id="mlErr">${authErrHTML()}</div>
   <button class="btn btn-go auth-btn" data-snd="ok" onclick="authDoReg()">注册并进入</button>`;
 }
 function authDoLogin(){
