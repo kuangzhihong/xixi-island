@@ -1064,7 +1064,7 @@ let   DBK=DBK_BASE;                // 当前登录账号的存档键（登录后
 let   DBK_SNAP=DBK+"_snap";        // 自动快照：上一版数据
 let   DBK_SNAP2=DBK+"_snap2";      // 自动快照：上上一版
 let   DBK_TIME=DBK+"_saved";       // 上次保存时间
-const APP_VER="1.9.26";             // App 版本号（备份文件里会写上）
+const APP_VER="1.9.27";             // App 版本号（备份文件里会写上）
 const $=s=>document.querySelector(s);
 
 /* ============================================================
@@ -1396,11 +1396,7 @@ function speak(text,lang){
         try{ S.speak(u); started=true; }catch(e){}
       });
     }catch(e){}
-    // 通用「没出声」看门狗：2.8 秒内一次都没进入 speaking，就提示（红米多为媒体音量没开）
-    setTimeout(()=>{
-      let ok=false; try{ ok=!!(S.speaking||S.pending); }catch(e){}
-      if(!ok) toast("📢 没听到朗读声？红米/安卓请先把「媒体音量」调大（按音量键看屏幕是否出现「媒体」条，不是「铃声」）；换成 Chrome 浏览器打开再试试。");
-    },2800);
+    // 不再自动弹「没出声」提示：短句读完常被误判，打扰体验。
   };
   // 安卓已知 bug：引擎停在 paused 时 speak 无声 → 先 resume，等它就绪再读（首次调用语音包常还是空的，多等一下）
   const needWait=_CACHED_VOICES.length===0;
@@ -2558,7 +2554,7 @@ function dailyZi(ds){ const lib=ziLibOf(curVol());
   const r=rngFor(ds+"zi-"+curVol()); return shuffleR(lib,r).slice(0,10); }
 
 /* ============================================================
-   ✍️ 生字练习：笔顺演示 / 田字格描红 / 听组词造句 / 提交批改
+   ✍️ 生字练习：笔顺演示 / 田字格描红 / 组词造句 / 提交批改
    HANZI_STROKES 路径在 1024×1024 坐标、y 轴需翻转（translate(0,900) scale(1,-1)）
 ============================================================ */
 let _ziPlayTimer=null, _ziIdx=0, _ziTrace=null;
@@ -2614,7 +2610,7 @@ function openZiPractice(i){
       </div>
       <div class="zg-tools">
         <button class="btn btn-blue btn-sm" data-snd="play" onclick="speak('${ch}')">🔊 读字</button>
-        <button class="btn btn-blue btn-sm" data-snd="play" onclick="ziListenWord()">🔊 听组词造句</button>
+        <button class="btn btn-blue btn-sm" data-snd="play" onclick="ziListenWord()">🔊 组词造句</button>
         <button class="btn btn-pink btn-sm" data-snd="play" onclick="ziPlayStrokes()">▶️ 看笔顺</button>
         <button class="btn btn-grey btn-sm" data-snd="tap" onclick="ziClear()">🧹 重写</button>
       </div>
@@ -4440,23 +4436,23 @@ function subPage(key){
      return subBar()+`
     <div class="card"><h3>🅰️ 今日生字 10 个（${volLabel(curVol("cn"))}）</h3>
       <div class="grid5">${zi.map((z,i)=>`<div class="zi-card" data-snd="play" onclick="openZiPractice(${i})"><div class="py">${z[1]}</div><div class="zi">${z[0]}</div><div class="cz">${z[2]}</div>${ziBest(z[0])?`<span class="zi-badge">${ziBest(z[0])}分</span>`:""}</div>`).join("")}</div>
-      <div style="color:var(--sub);font-size:12px;margin-top:10px">👆 点生字 → 笔顺 / 田字格描红 / 听组词造句</div>
+      <div style="color:var(--sub);font-size:12px;margin-top:10px">👆 点生字 → 笔顺 / 田字格描红 / 组词造句</div>
       ${followBox("cn_zi",zi.map(z=>z[0]).join(""),"跟读今天的 10 个生字")}</div>
     ${ziUnits.length?`<div class="card"><h3>📚 本册识字表</h3>${ziUnits.map(u=>`<div class="know-u"><div class="ku">${u.u}</div>${(u.p||[]).map(p=>`<div class="kp">· ${p}</div>`).join("")}</div>`).join("")}</div>`:""}`;
    }
    case "cn_book": {
      const story=dailyStory(ds), reading=dailyReading(ds), poems=dailyPoems(ds);
      return subBar()+`
-    <div class="card"><h3>🌅 每日故事 ·《${story.t}》</h3><div class="story-text">${rubyHTML(story.x)}</div><div class="explain">💡 ${story.m}</div>
+    <div class="card"><h3>🌅 每日故事 ·《${story.t}》</h3><div class="story-text">${escHtml(story.x)}</div><div class="explain">💡 ${story.m}</div>
       <button class="btn btn-blue btn-sm" data-snd="play" onclick="speak(${JSON.stringify(story.x).replace(/"/g,'&quot;')})">🔊 听一遍</button>
       ${followBox("cn_story",story.x,"跟读今天的故事")}</div>
     <div class="card poem-card"><h3>📖 每日古诗 / 文言文 · 两首</h3>
       ${poems.map((p,idx)=>`<div class="poem"><div class="poem-head"><span class="poem-t">《${p.t}》</span><span class="poem-a">${p.a}</span><span class="poem-tag ${p.type==="文言文"?"wen":"shi"}">${p.type}</span></div>
-        <div class="poem-body">${rubyHTML(p.x).replace(/\n/g,'<br>')}</div>
+        <div class="poem-body">${escHtml(p.x).replace(/\n/g,'<br>')}</div>
         <div class="poem-mean">💡 ${p.type==="文言文"?"译文：":"诗意："}${p.y}</div>
         <button class="btn btn-blue btn-sm" data-snd="play" onclick="speak(${JSON.stringify(p.x).replace(/"/g,'&quot;')})">🔊 听一听</button>
         ${followBox("cnb_poem_"+idx,p.x,"跟读并背诵这首"+(p.type||"古诗"))}</div>`).join("")}</div>
-    <div class="card"><h3>📖 阅读理解 ·《${reading.t}》</h3><div class="story-text">${rubyHTML(reading.x)}</div><button class="btn btn-go btn-sm" onclick="startReading()">✏️ 开始答题</button>
+    <div class="card"><h3>📖 阅读理解 ·《${reading.t}》</h3><div class="story-text">${escHtml(reading.x)}</div><button class="btn btn-go btn-sm" onclick="startReading()">✏️ 开始答题</button>
       ${followBox("cn_read",reading.x,"跟读今天的阅读短文")}</div>
 `;
    }
@@ -4722,7 +4718,7 @@ cn(){
     <div class="voltip">📖 当前课本：<b>${volLabel(curVol())}</b> · 换年级去 <a onclick="go('home')" style="cursor:pointer">主页</a> 点一下就好～</div>
     ${gradeOf(curVol("cn"))===1?`<div class="subchip-row">${subChip("cn","pinyin","🔡 拼音")}</div>`:""}
     <div class="card"><h3>🌅 每日故事 ·《${story.t}》 ${isDone("cn_story")?'<span class="tag done">✓</span>':""}</h3>
-      <div class="story-text">${rubyHTML(story.x)}</div>
+      <div class="story-text">${escHtml(story.x)}</div>
       <div class="explain">💡 小道理：${story.m}</div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-blue btn-sm" data-snd="play" onclick="speak(${JSON.stringify(story.x).replace(/"/g,'&quot;')})">🔊 听一遍</button>
@@ -4732,11 +4728,11 @@ cn(){
     <div class="card"><h3>✍️ 今日生字 10 个（${volLabel(curVol("cn"))}）${isDone("cn_zi")?'<span class="tag done">✓</span>':""}</h3>
       <div class="grid5">${zi.map((z,i)=>`
         <div class="zi-card" data-snd="play" onclick="openZiPractice(${i})"><div class="py">${z[1]}</div><div class="zi">${z[0]}</div><div class="cz">${z[2]}</div>${ziBest(z[0])?`<span class="zi-badge">${ziBest(z[0])}分</span>`:""}</div>`).join("")}</div>
-      <div style="color:var(--sub);font-size:12px;margin:10px 0">👆点生字 → 看笔顺、田字格描红、听组词造句，写完打卡～</div>
+      <div style="color:var(--sub);font-size:12px;margin:10px 0">👆点生字 → 看笔顺、田字格描红、组词造句，写完打卡～</div>
       <button class="btn btn-green btn-sm" ${isDone("cn_zi")?"disabled":""} data-snd="ok" onclick="completeTask('cn_zi')">✅ 练完 10 个啦</button>
       ${followBox("cn_zi",zi.map(z=>z[0]).join(""),"跟读今天的 10 个生字")}</div>
     <div class="card"><h3>📖 阅读理解 ·《${reading.t}》 ${isDone("cn_read")?'<span class="tag done">✓</span>':""}</h3>
-      <div class="story-text">${rubyHTML(reading.x)}</div>
+      <div class="story-text">${escHtml(reading.x)}</div>
       <button class="btn btn-blue btn-sm" onclick="startReading()">✏️ 开始答题</button>
       ${followBox("cn_read",reading.x,"跟读今天的阅读短文")}</div>
     <div class="card poem-card"><h3>📖 每日古诗 / 文言文 · 两首 ${isDone("cn_poem")?'<span class="tag done">✓</span>':""}</h3>
@@ -4745,7 +4741,7 @@ cn(){
         <div class="poem">
           <div class="poem-head"><span class="poem-t">《${p.t}》</span><span class="poem-a">${p.a}</span><span class="poem-tag ${p.type==="文言文"?"wen":"shi"}">${p.type}</span></div>
           <div class="poem-illu">${poemScene(p.scene)}</div>
-          <div class="poem-body">${rubyHTML(p.x).replace(/\n/g,'<br>')}</div>
+          <div class="poem-body">${escHtml(p.x).replace(/\n/g,'<br>')}</div>
           <div class="poem-mean">💡 ${p.type==="文言文"?"译文：":"诗意："}${p.y}</div>
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
             <button class="btn btn-blue btn-sm" data-snd="play" onclick="speak(${JSON.stringify(p.x).replace(/"/g,'&quot;')})">🔊 听一听</button>
