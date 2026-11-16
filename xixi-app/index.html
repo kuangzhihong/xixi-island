@@ -101,7 +101,9 @@
   .subchip:active{ transform:scale(.95); }
   .subhead-bar{ margin:2px 0 10px; }
   .subhead-bar .chip{ margin:0; }
-  .main{ flex:1; margin-left:0; padding:12px 12px calc(28px + env(safe-area-inset-bottom)); max-width:640px; }
+  /* min-width:0：flex 子项默认 min-width:auto 会被内部内容按 min-content 撑到 max-width(640)，
+     在窄屏手机上让整页右侧溢出被裁（账号中心输入框/说明文字最明显）。加 0 允许收缩到视口宽。 */
+  .main{ flex:1; min-width:0; margin-left:0; padding:12px 12px calc(28px + env(safe-area-inset-bottom)); max-width:640px; }
   @media(min-width:760px){ .main{ max-width:720px; } }
   @media(min-width:900px){ .main{ margin-left:212px; } }
 
@@ -850,10 +852,11 @@
   .auth-preview .lg-ava-ok{ margin-left:auto; font-size:11.5px; color:#1aad19; font-weight:800; }
   /* 我的 · 账号页 */
   .me-head{ display:flex; align-items:center; gap:13px; }
-  .me-name{ font-size:18px; font-weight:800; color:#d63384; }
-  .me-sub{ font-size:12px; color:var(--sub); margin-top:3px; }
-  .me-sub2{ font-size:11.5px; color:#1d8f68; margin-top:4px; font-weight:700; }
-  .me-row{ margin-bottom:8px; }
+  .me-name{ font-size:18px; font-weight:800; color:#d63384; overflow-wrap:anywhere; }
+  .me-sub{ font-size:12px; color:var(--sub); margin-top:3px; overflow-wrap:anywhere; }
+  .me-sub2{ font-size:11.5px; color:#1d8f68; margin-top:4px; font-weight:700; overflow-wrap:anywhere; }
+  .me-row{ margin-bottom:8px; max-width:100%; }
+  .me-row input{ min-width:0; }
   .me-wx-ok{ font-size:13.5px; font-weight:800; color:#1aad19; display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
   /* 微信授权弹窗（本机模拟） */
   .wxauth{ text-align:center; }
@@ -1086,7 +1089,7 @@ let   DBK=DBK_BASE;                // 当前登录账号的存档键（登录后
 let   DBK_SNAP=DBK+"_snap";        // 自动快照：上一版数据
 let   DBK_SNAP2=DBK+"_snap2";      // 自动快照：上上一版
 let   DBK_TIME=DBK+"_saved";       // 上次保存时间
-const APP_VER="1.9.29";             // App 版本号（备份文件里会写上）
+const APP_VER="1.9.30";             // App 版本号（备份文件里会写上）
 const $=s=>document.querySelector(s);
 
 /* ============================================================
