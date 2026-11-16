@@ -122,6 +122,14 @@
     padding-top:calc(6px + env(safe-area-inset-top,0px));
     box-shadow:0 8px 16px -9px rgba(168,98,140,.5); }
   body.scrolled .topbar .date-sub{ display:none; }
+  /* 手机端顶栏：安卓/WebView 上 backdrop-filter 会让顶栏文字发虚，改实色保证清晰 */
+  @media(max-width:760px){
+    .topbar, body.bg-liquid .topbar, body.frame-liquid .topbar, body.frame-glass .topbar{
+      -webkit-backdrop-filter:none!important; backdrop-filter:none!important;
+      background:#fdf0f6!important; box-shadow:none!important; }
+    .topbar .pill, body.bg-liquid .topbar .pill, body.frame-liquid .topbar .pill, body.frame-glass .topbar .pill{
+      -webkit-backdrop-filter:none!important; backdrop-filter:none!important; }
+  }
   .pill{ background:var(--cream); border:2px solid #ffb5d6; border-radius:20px; padding:6px 12px; font-size:13px; font-weight:700; box-shadow:0 2px 0 #ffb5d6; }
   .pill.ok{ background:#e9fbf5; border-color:#7fe0bd; box-shadow:0 2px 0 #7fe0bd; }
   .date-big{ font-size:19px; font-weight:800; }
@@ -1039,7 +1047,7 @@ let   DBK=DBK_BASE;                // 当前登录账号的存档键（登录后
 let   DBK_SNAP=DBK+"_snap";        // 自动快照：上一版数据
 let   DBK_SNAP2=DBK+"_snap2";      // 自动快照：上上一版
 let   DBK_TIME=DBK+"_saved";       // 上次保存时间
-const APP_VER="1.9.24";             // App 版本号（备份文件里会写上）
+const APP_VER="1.9.25";             // App 版本号（备份文件里会写上）
 const $=s=>document.querySelector(s);
 
 /* ============================================================
@@ -1374,7 +1382,7 @@ function speak(text,lang){
     // 通用「没出声」看门狗：2.8 秒内一次都没进入 speaking，就提示（红米多为媒体音量没开）
     setTimeout(()=>{
       let ok=false; try{ ok=!!(S.speaking||S.pending); }catch(e){}
-      if(!ok) toast("📢 没听到朗读声？红米/安卓请先把「媒体音量」调大（按音量键看屏幕是否出现「媒体」条，不是「铃声」）；或到「我的→声音自检」点⑤查原因。");
+      if(!ok) toast("📢 没听到朗读声？红米/安卓请先把「媒体音量」调大（按音量键看屏幕是否出现「媒体」条，不是「铃声」）；换成 Chrome 浏览器打开再试试。");
     },2800);
   };
   // 安卓已知 bug：引擎停在 paused 时 speak 无声 → 先 resume，等它就绪再读（首次调用语音包常还是空的，多等一下）
@@ -2145,6 +2153,7 @@ function defaultDB(){
     completions:{},               // {日期:{taskId:1,_bonus:1}}
     disabled:[], custom:[],
     rewards:defaultRewards(), nextRid:7,
+    shopCats:["美食","玩具文具","玩乐"],   // 兑换小铺分类（可自定义增删）
     redemptions:[],               // {id,name,cost,at,status}
     garden:{plants:[],zombies:[],lastDay:todayStr(),nightDone:{},msg:"欢迎来到茜茜的花园！"},
     pet:{petId:"",name:"",owned:[],pets:{},lastDay:todayStr()},   // 🐾 宠物：petId=当前陪伴，owned=已领养，pets=每只各自状态
@@ -2390,6 +2399,7 @@ function migrate(d){
   if(!Array.isArray(d.disabled)) d.disabled=[];
   if(!Array.isArray(d.custom)) d.custom=[];
   if(!Array.isArray(d.rewards)) d.rewards=defaultRewards();
+  if(!Array.isArray(d.shopCats)||!d.shopCats.length) d.shopCats=def.shopCats.slice();
   /* 奖励清单版本升级：存档里还是旧版默认清单（没自己改过）就整体换成新清单 */
   if(typeof d.rewardsVer!=="number")
     d.rewardsVer=(d.rewards.length===OLD_REWARD_NAMES.length && d.rewards.every((r,i)=>r&&r.name===OLD_REWARD_NAMES[i]))?1:REWARDS_VER;
@@ -2886,7 +2896,7 @@ function _ttsWatch(k){
 }
 function _ttsGuide(k){
   const out=_fbOut(k); if(!out) return;
-  out.innerHTML=`<div class="follow-msg">😢 好像没读出声音。<br>安卓手机请到「<b>设置 → 系统 → 语言和输入法 → 文字转语音(TTS)</b>」装一个语音引擎，并下载<b>中文</b>语音包，回来就能听到啦。<br><span style="color:#b58aa8">也可以在「我的 → 声音自检」里查原因。</span></div>`;
+  out.innerHTML=`<div class="follow-msg">😢 好像没读出声音。<br>安卓手机请到「<b>设置 → 系统 → 语言和输入法 → 文字转语音(TTS)</b>」装一个语音引擎，并下载<b>中文</b>语音包，回来就能听到啦。<br><span style="color:#b58aa8">换 Chrome 浏览器打开，或检查手机媒体音量，通常就好了。</span></div>`;
   sfx("warn");
 }
 /* ② 录音：按一下开始、再按一下停止（不限时，界面只显示已录多久） */
@@ -4043,11 +4053,20 @@ function todayPanel(){
   const ds=today();
   const groups=["cn","math","en","sci","moral","life","custom"];
     const sec=groups.map(g=>{
-    const list=allTasks().filter(t=>t.g===g); if(!list.length) return "";
-    const dn=list.filter(t=>isDone(t.id)).length;
+    const list=allTasks().filter(t=>t.g===g);
+    const extra=g==="life"?extraList("chore").concat(extraList("exer")):[];
+    if(!list.length&&!extra.length) return "";
+    const dn=list.filter(t=>isDone(t.id)).length+extra.filter(x=>isDone(x.id)).length;
+    const total=list.length+extra.length;
     return `<div class="card">
-      <h3><span style="color:${GROUPS[g].c}">■</span> ${GROUPS[g].n}任务 <span class="tag">${dn}/${list.length}</span></h3>
+      <h3><span style="color:${GROUPS[g].c}">■</span> ${GROUPS[g].n}任务 <span class="tag">${dn}/${total}</span></h3>
       ${list.map(t=>taskIconRow(t)).join("")}
+      ${extra.length?`<div style="font-size:12px;color:var(--sub);margin:8px 0 2px">🧹 家务 · 🏃‍♀️ 锻炼（都算在生活任务里）</div>`+extra.map(x=>extraRow(x)).join("")+
+        `<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <div class="addbar" style="flex:1;min-width:110px" onclick="showExtraAdd('chore')">＋ 家务</div>
+          <div class="addbar" style="flex:1;min-width:110px" onclick="showExtraAdd('exer')">＋ 锻炼</div>
+          <button class="btn btn-grey btn-sm" data-snd="tap" onclick="manageExtra()">✂️ 管理</button>
+        </div>`:""}
     </div>`;
   }).join("");
   const out=outdoorOut(ds);
@@ -4056,24 +4075,6 @@ function todayPanel(){
   return `
     ${isAllDone(ds)?`<div class="card" style="background:linear-gradient(135deg,#fff3c2,#ffe0f0);border-color:#ffb62e">
       <h3>🏆 今日全部完成！</h3><div style="font-size:13px;color:var(--sub)">茜茜太棒啦！阳光和钻石都收到啦，去「🐱 宠物」摸摸小伙伴，或者去「💎 兑换」换喜欢的奖励吧～</div></div>`:""}
-    <div class="card"><h3>🏡 户外锻炼 ${outdoorHours()} 小时 <span class="tag">${outdoorMin(ds)}/${outdoorTargetMin()} 分钟</span>
-      ${isDone("outdoor")?'<span class="tag done">✓ 已打卡</span>':""}</h3>
-      <div>${acts.map(a=>`<button class="chip ${out.includes(a[1])?'on':''}" ${out.includes(a[1])||outDone?'disabled':''} onclick="doOutdoor('${a[1]}')">${out.includes(a[1])?'✓':icoOf(a[0])}${a[1]} ${OUTDOOR_UNIT}分钟</button>`).join("")}</div>
-      <div class="minipro"><i style="width:${Math.min(100,outdoorMin(ds)/outdoorTargetMin()*100)}%"></i></div>
-    </div>
-    <div class="card"><h3>🧭 快捷入口</h3>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-        <button class="btn btn-sm" style="background:#fffafd;color:var(--ink);box-shadow:0 3px 0 #ffc6e1;padding:11px 4px" onclick="go('chore')">
-          <div style="font-size:24px">🧹</div><div style="font-size:12.5px;font-weight:800">家务</div>
-          <div style="font-size:10.5px;color:var(--sub)">${extrasProgress("chore")}</div></button>
-        <button class="btn btn-sm" style="background:#fffafd;color:var(--ink);box-shadow:0 3px 0 #ffc6e1;padding:11px 4px" onclick="go('exer')">
-          <div style="font-size:24px">🏃‍♀️</div><div style="font-size:12.5px;font-weight:800">锻炼</div>
-          <div style="font-size:10.5px;color:var(--sub)">${extrasProgress("exer")}</div></button>
-        <button class="btn btn-sm" style="background:#fffafd;color:var(--ink);box-shadow:0 3px 0 #ffc6e1;padding:11px 4px" onclick="go('video')">
-          <div style="font-size:24px">📺</div><div style="font-size:12.5px;font-weight:800">科目视频</div>
-          <div style="font-size:10.5px;color:var(--sub)">语文/数学/英语</div></button>
-      </div>
-    </div>
     ${sec}`;
 }
 
@@ -5243,7 +5244,7 @@ cat(){
 
 shop(){
   const cat=window._shopCat||"全部";
-  const cats=["全部","美食","玩具文具","玩乐"];
+  const cats=["全部"].concat(shopCats());
   const list=db.rewards.filter(r=>cat==="全部"||r.cat===cat);
   const pending=db.redemptions.filter(r=>r.status==="pending");
   return `
@@ -5266,7 +5267,7 @@ shop(){
       :`<div class="empty">还没有兑换记录，攒攒钻石换喜欢的奖励吧～</div>`}
     </div>
     <div class="card"><h3>🎁 兑换小铺 <span style="float:right;font-weight:400;font-size:11px;color:var(--sub)">点 🗑 可删除</span></h3>
-      <div class="cat-tabs">${cats.map(c=>`<button class="chip ${c===cat?'on':''}" onclick="window._shopCat='${c}';render()">${{全部:"✨",美食:"😋",玩具文具:"🧸",玩乐:"🎮"}[c]} ${c}</button>`).join("")}</div>
+      <div class="cat-tabs">${cats.map(c=>`<button class="chip ${c===cat?'on':''}" onclick="window._shopCat='${c}';render()">${shopCatEmo(c)} ${c}</button>`).join("")}<button class="chip" data-snd="tap" onclick="manageShopCats()">⚙️ 管理分类</button></div>
       ${list.length?list.map(r=>`
         <div class="task-row"><span class="ti">${r.em}</span>
           <div class="tmid"><div class="tnm">${r.name}</div>
@@ -5282,7 +5283,7 @@ shop(){
         <input id="srName" placeholder="奖励名称">
         <input id="srCost" type="number" placeholder="💎 价格">
         <select id="srCat">
-          <option value="美食">美食</option><option value="玩具文具">玩具文具</option><option value="玩乐">玩乐</option>
+          ${shopCats().map(c=>`<option value="${c}">${c}</option>`).join("")}
         </select>
       </div>
       <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="addReward(document.getElementById('srEm').value,document.getElementById('srName').value,document.getElementById('srCost').value,document.getElementById('srCat').value)">＋ 添加奖励</button>
@@ -5339,25 +5340,6 @@ checkin(){
 },
 manage(){
   return `
-    <div class="card"><h3>🔊 声音自检（点一点，听听有没有声音）</h3>
-      <div style="font-size:12px;color:var(--sub);margin-bottom:10px">前四个按钮分别检查：① 按钮点击音效　② 中文朗读　③ 英文朗读　④ 音乐琴键。若都没声音，请把手机/电脑音量调大，并确认顶栏显示的是 🔊 有声（不是 🔇 静音）。还不行就点 ⑤ 看看这台设备的诊断结果。</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-green btn-sm" data-snd="play" onclick="audioTest('sfx')">① 音效</button>
-        <button class="btn btn-pink btn-sm" data-snd="play" onclick="audioTest('zh')">② 中文朗读</button>
-        <button class="btn btn-pink btn-sm" data-snd="play" onclick="audioTest('en')">③ 英文朗读</button>
-        <button class="btn btn-go btn-sm" data-snd="play" onclick="audioTest('note')">④ 音乐琴键</button>
-        <button class="btn btn-sm" data-snd="tap" onclick="audioTest('diag')">⑤ 设备诊断</button>
-      </div>
-      <div id="audioTestOut" class="follow-msg"></div>
-    </div>
-    <div class="card" style="background:#fff7fb;border:1px solid #f3c6dd">
-      <h3>🔊 还是没声音？（红米/小米最常见 3 个原因）</h3>
-      <ol style="font-size:13px;line-height:1.75;padding-left:18px;margin:6px 0">
-        <li><b>媒体音量为 0</b>：按侧边音量键默认调的是「铃声」。<b>播放时点一下音量键，看屏幕顶部是否出现「媒体」条，把它拉到最大</b>；或「设置→声音与振动→音量」里把「媒体」拉满。</li>
-        <li><b>在微信里打开</b>：微信内置浏览器会禁掉网页声音。请用 <b>Chrome</b> 打开链接，或「⋯→添加到主屏幕」当 App 用。</li>
-        <li><b>没装语音引擎</b>（只有朗读没声、按钮音效正常）：到「设置→更多设置→文字转语音(TTS)输出」，把<b>首选引擎</b>改成「Google 文字转语音引擎」，再点「安装语音数据」选<b>中文</b>，装好重开本页即可。</li>
-      </ol>
-    </div>
     <div class="card"><h3>📋 每日任务管理</h3>
       <div style="font-size:12px;color:var(--sub);margin-bottom:10px">内置任务可「停用 / 启用」，自定义任务可新增 / 删除。完成任务自动得 💎 和 ☀️。</div>
       ${DEFAULT_TASKS.map(t=>`
@@ -5387,35 +5369,11 @@ manage(){
       </div>
       <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="addCustom()">＋ 添加任务</button>
     </div>
-    <div class="card"><h3>🧹 家务 / 🏃‍♀️ 锻炼任务</h3>
-      <div style="font-size:12px;color:var(--sub);margin-bottom:8px">内置任务不能删除（可加自定义的）；「✕ 去掉今天」的记录每天自动重置。</div>
-      ${[["chore","🧹 家务"],["exer","🏃‍♀️ 锻炼"]].map(([k,nm])=>`
-        <div style="font-weight:800;font-size:13px;margin:10px 0 6px">${nm}</div>
-        ${extraOwn(k).map(x=>`<div class="task-row"><span class="ti">${icoOf(x.icon)}</span>
-          <div class="tmid"><div class="tnm">${x.name}</div><div class="trw">+${x.sun}☀️ +${x.dia}💎</div></div>
-          <span class="tag">内置</span></div>`).join("")}
-        ${extraCustom(k).map(x=>`<div class="task-row"><span class="ti">${icoOf(x.icon)}</span>
-          <div class="tmid"><div class="tnm">${x.name}</div><div class="trw">+${x.sun}☀️ +${x.dia}💎</div></div>
-          <button class="btn btn-red btn-sm" onclick="delExtra('${k}','${x.id}')">删除</button></div>`).join("")}
-      `).join("")}
-      ${extraRemovedIds().length?`<div style="margin-top:10px"><button class="btn btn-green btn-sm" onclick="restoreAllExtra()">↺ 恢复今天去掉的 ${extraRemovedIds().length} 项</button></div>`:""}
-    </div>
     <div class="card"><h3>📺 我的视频（收藏）</h3>
       ${(db.videos.custom||[]).length?db.videos.custom.map(v=>`<div class="task-row"><span class="ti">🎬</span>
         <div class="tmid"><div class="tnm">${esc(v.name)}</div><div class="trw">${esc(v.sub||"拓展")}</div></div>
         <button class="btn btn-red btn-sm" onclick="delVideo(${v.id})">删除</button></div>`).join("")
       :`<div class="empty">还没有收藏视频，去「📺 视频」页的「我的」里添加</div>`}
-    </div>
-    <div class="card"><h3>🎁 奖励管理（兑换小铺）</h3>
-      ${db.rewards.map(r=>`
-        <div class="task-row"><span class="ti">${r.em}</span>
-          <div class="tmid"><div class="tnm">${r.name}</div><div class="trw">${r.cat} · ${r.cost}💎</div></div>
-          <button class="btn btn-red btn-sm" onclick="delReward(${r.id})">删除</button></div>`).join("")}
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px">
-        <input id="rwName" placeholder="奖励名称">
-        <input id="rwCost" type="number" placeholder="💎 价格">
-      </div>
-      <button class="btn btn-green btn-sm" style="margin-top:10px" onclick="addReward('🎁',document.getElementById('rwName').value,document.getElementById('rwCost').value,'玩乐')">＋ 添加奖励</button>
     </div>
     <div class="card"><h3>📲 装到手机上（像 App 一样）</h3>
       <div style="font-size:13px;line-height:1.95;color:var(--ink)">
@@ -7607,10 +7565,41 @@ function addCustomFromCard(){
     name:name.trim(),dia:parseInt((document.getElementById("caDia")||{}).value)||5,sun:parseInt((document.getElementById("caSun")||{}).value)||10});
   saveDB(); renderTopbar(); render(); closeModal(); toast("✅ 任务已添加！");
 }
+function shopCats(){ if(!Array.isArray(db.shopCats)||!db.shopCats.length) db.shopCats=["美食","玩具文具","玩乐"]; return db.shopCats; }
+function shopCatEmo(c){ return ({全部:"✨",美食:"😋",玩具文具:"🧸",玩乐:"🎮"}[c])||"🏷️"; }
+function addShopCat(){
+  const el=document.getElementById("scNew"); const n=(el&&el.value||"").trim();
+  if(!n){ toast("写个分类名称哦"); return; }
+  if(n==="全部"||shopCats().includes(n)){ toast("这个分类已经有了"); return; }
+  db.shopCats.push(n); saveDB(); closeModal(); render(); toast("分类「"+n+"」已添加");
+}
+function delShopCat(c){
+  if(c==="全部"){ toast("「全部」不能删哦"); return; }
+  const list=shopCats().filter(x=>x!==c); if(!list.length){ toast("至少留一个分类"); return; }
+  const fallback=list[0]; db.shopCats=list;
+  (db.rewards||[]).forEach(r=>{ if(r.cat===c) r.cat=fallback; });
+  saveDB(); closeModal(); render(); toast("分类已删，里面的奖励移到了「"+fallback+"」");
+}
+function manageShopCats(){
+  showModal(`<h3>🏷️ 管理兑换分类</h3>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:8px">可以自己加分类、删分类。删掉的分类里的奖励会自动移到第一个分类。</div>
+    ${shopCats().map(c=>`<div class="task-row"><span class="ti">${shopCatEmo(c)}</span><div class="tmid"><div class="tnm">${esc(c)}</div></div><button class="btn btn-red btn-sm" data-snd="tap" onclick="delShopCat('${esc(c)}')">删除</button></div>`).join("")}
+    <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:10px">
+      <input id="scNew" placeholder="新分类名(如 学习用品)">
+      <button class="btn btn-green btn-sm" data-snd="ok" onclick="addShopCat()">＋ 添加</button>
+    </div>`);
+}
+function manageExtra(){
+  const rows=[["chore","🧹 家务",db.chores.custom||[]],["exer","🏃‍♀️ 锻炼",db.exer.custom||[]]];
+  showModal(`<h3>✂️ 管理家务 / 锻炼任务</h3>
+    ${rows.map(([k,nm,lst])=>`<div style="font-weight:800;font-size:13px;margin:10px 0 6px">${nm}</div>`+
+      (lst.length?lst.map(x=>`<div class="task-row"><span class="ti">${icoOf(x.icon)}</span><div class="tmid"><div class="tnm">${esc(x.name)}</div></div><button class="btn btn-red btn-sm" data-snd="tap" onclick="delExtra('${k}','${x.id}');closeModal()">删除</button></div>`).join(""):`<div class="empty" style="font-size:12px">还没有自定义任务</div>`)).join("")}
+    <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-grey btn-sm" data-snd="tap" onclick="closeModal()">关闭</button></div>`);
+}
 function addReward(em,name,cost,cat){
   name=(name||"").trim(); cost=parseInt(cost);
   if(!name||!cost){ toast("填好名称和价格哦"); return; }
-  db.rewards.push({id:db.nextRid++,em:em||"🎁",name,cost,cat:cat||"玩乐"});
+  db.rewards.push({id:db.nextRid++,em:em||"🎁",name,cost,cat:cat||shopCats()[0]||"其他"});
   saveDB(); render(); toast("🎁 奖励已添加！");
 }
 function delReward(id){
