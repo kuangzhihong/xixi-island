@@ -1,17 +1,17 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#ff7ab8">
-<meta name="apple-mobile-web-app-title" content="茜茜小岛">
-<meta name="application-name" content="茜茜小岛">
-<meta name="description" content="茜茜专属学习工作台：每日语数英任务、古诗跟读、学习游戏、花园种植物打僵尸、云宠小咪、钻石兑换。数据保存在本机，可导出备份。">
-<meta name="format-detection" content="telephone=no">
-<meta name="color-scheme" content="light">
+<html lang="zh-CN" data-page-node-id="pTf02eaYDOnMOLwQ0gCoG8">
+<head data-page-node-id="ZR9qD7sxjtAGV3lYYgfDhK">
+<meta charset="UTF-8" data-page-node-id="NEvcyUxA4aXxDHOrDz18E3">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" data-page-node-id="MDKLhk0SYjNTZ1mx1q4znC">
+<meta name="apple-mobile-web-app-capable" content="yes" data-page-node-id="aE0dnkhXPo7OOzCv5cCRnt">
+<meta name="mobile-web-app-capable" content="yes" data-page-node-id="DXt9monhwzv1UTcakcR6Dj">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" data-page-node-id="rOcKdZ225RO46AQ8DFAozw">
+<meta name="theme-color" content="#ff7ab8" data-page-node-id="bP81MEzM4qzKWpj91FHDS4">
+<meta name="apple-mobile-web-app-title" content="茜茜小岛" data-page-node-id="6fh2HAAjGkesXAZQj1nxTr">
+<meta name="application-name" content="茜茜小岛" data-page-node-id="Qnxvmj3gmdionlmC4i0lft">
+<meta name="description" content="茜茜专属学习工作台：每日语数英任务、古诗跟读、学习游戏、花园种植物打僵尸、云宠小咪、钻石兑换。数据保存在本机，可导出备份。" data-page-node-id="xTuPw4sp8K7zLkJLdinWVq">
+<meta name="format-detection" content="telephone=no" data-page-node-id="KwbXSCzJ9NoQVCoJJwR2Ju">
+<meta name="color-scheme" content="light" data-page-node-id="J3X7C67nDfvwDqvJ1Q73OH">
 <title>茜茜的小岛 · 学习工作台</title>
 <!-- App（PWA）清单与图标由脚本在 http(s) 下自动装配，见文件末尾「手机 App 装配」 -->
 <style>
@@ -25,6 +25,7 @@
     --shadow:rgba(200,120,160,.20);
     --bar:rgba(253,238,244,.94); --barline:rgba(232,186,208,.55);
   }
+  html{ overflow-x:hidden; }
   html,body{ height:100%; -webkit-text-size-adjust:100%; text-size-adjust:100%; }
   body{
     background:repeating-linear-gradient(180deg,var(--grass1) 0 60px,var(--grass2) 60px 120px);
@@ -129,6 +130,13 @@
       background:#fdf0f6!important; box-shadow:none!important; }
     .topbar .pill, body.bg-liquid .topbar .pill, body.frame-liquid .topbar .pill, body.frame-glass .topbar .pill{
       -webkit-backdrop-filter:none!important; backdrop-filter:none!important; }
+    /* v1.9.26：语文页字不被挤没——生字卡缩小留白、注音再小一号 */
+    .grid5{ grid-template-columns:repeat(5,minmax(0,1fr)); gap:5px; }
+    .zi-card{ padding:8px 1px; }
+    .zi-card .py{ font-size:11px; }
+    .zi-card .cz{ font-size:10px; }
+    .story-text,.poem-body{ font-size:14px; line-height:2.2; }
+    rt{ font-size:9px; }
   }
   .pill{ background:var(--cream); border:2px solid #ffb5d6; border-radius:20px; padding:6px 12px; font-size:13px; font-weight:700; box-shadow:0 2px 0 #ffb5d6; }
   .pill.ok{ background:#e9fbf5; border-color:#7fe0bd; box-shadow:0 2px 0 #7fe0bd; }
@@ -249,7 +257,11 @@
   .zi-card .py{ color:#e0567f; font-size:12px; font-weight:700; }
   .zi-card .zi{ font-size:30px; font-weight:800; }
   .zi-card .cz{ color:var(--sub); font-size:11px; }
-  .grid5{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  .grid5{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+  .zi-card{ min-width:0; position:relative; }
+  .zi-card .zi{ font-size:clamp(22px,6vw,30px); }
+  .zi-card .cz{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .zi-badge{ position:absolute; top:2px; right:2px; font-size:9px; font-weight:800; color:#fff; background:#ff8fbb; border-radius:8px; padding:0 4px; }
   /* ===== 生字：笔顺 / 田字格描红 ===== */
   .zi-prac{ text-align:center; }
   .zg-wrap{ position:relative; width:min(78vw,300px); height:min(78vw,300px); margin:8px auto 4px; }
@@ -260,6 +272,7 @@
   .zg-stroke{ fill:none; stroke:#ff5f9e; stroke-width:26; stroke-linecap:round; stroke-linejoin:round; }
   .zg-guidetxt{ font-size:12px; color:var(--sub); margin-top:8px; line-height:1.7; }
   .zg-score{ min-height:22px; font-weight:800; color:#d63384; font-size:15px; margin-top:8px; }
+  .zi-log{ font-size:11.5px; color:var(--sub); background:#fff8fc; border:1.5px dashed #ffd2e8; border-radius:10px; padding:7px 9px; margin-top:8px; line-height:1.7; }
 
   /* 口算 */
   .oral-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
@@ -357,15 +370,19 @@
   /* 弹窗 */
   .mask{ position:fixed; inset:0; background:rgba(40,25,5,.6); display:none; align-items:center; justify-content:center; z-index:50; padding:14px; }
   .modal{ background:var(--cream); border:3px solid var(--wood); border-radius:20px; width:560px; max-width:100%; max-height:88vh; overflow:auto; padding:18px; }
-  .modal h3{ margin-bottom:12px; }
+  .modal h3{ margin-bottom:12px; padding-right:34px; }
+  .modal-x{ position:absolute; top:9px; right:10px; width:32px; height:32px; border-radius:50%;
+    border:2px solid #ffd0e6; background:#fff; color:#c9317e; font-size:16px; font-weight:800; line-height:1; z-index:3; }
   .q-opt{ display:flex; gap:9px; align-items:center; background:#fffafd; border:2.5px solid #ffc6e1; border-radius:13px; padding:11px 13px; margin-bottom:9px; font-size:14.5px; cursor:pointer; }
   .q-opt.sel{ border-color:#ffb62e; background:#fff3c2; }
   .q-opt.right{ border-color:#3ecfa0; background:#e9fbf5; }
   .q-opt.wrongp{ border-color:#ff8fb6; background:#fff0f6; }
   .explain{ background:#ffeff8; border-radius:11px; padding:11px 13px; font-size:13px; color:var(--sub); line-height:1.7; margin:10px 0; }
   .story-text{ background:#fffafd; border-radius:12px; padding:14px; line-height:2.1; font-size:15px; border:2px dashed #ffd2e8; }
-  ruby{ ruby-position:over; -webkit-ruby-position:over; }
-  rt{ font-size:11px; color:#e0567f; font-weight:700; line-height:1; letter-spacing:0; }
+  ruby{ ruby-position:over; -webkit-ruby-position:over; position:relative; white-space:nowrap; }
+  rt{ position:absolute; left:50%; top:-1.05em; transform:translateX(-50%);
+    font-size:10px; color:#e0567f; font-weight:700; line-height:1; letter-spacing:0; white-space:nowrap; }
+  .story-text,.poem-body,.explain{ overflow-wrap:anywhere; word-break:break-word; }
   .poem-body ruby rt{ font-size:12px; color:#d96fa0; }
   .poem-body{ line-height:2.5; }
   .qzw-py ruby rt{ font-size:12px; }
@@ -1022,20 +1039,20 @@
   .exsel:active{ transform:translateY(1px); box-shadow:none; }
 </style>
 </head>
-<body>
-<div class="layout">
-  <div class="nav-mask" id="navMask" onclick="closeNav()"></div>
-  <aside class="sidebar" id="sidebar">
-    <div class="side-logo"><span class="em" id="logoEm">🌸</span><span id="logoName">茜茜</span><button class="nav-close" onclick="closeNav()" title="收起菜单">✕</button></div>
-    <div id="navList"></div>
+<body data-page-node-id="IYMcWgXJ5ITwm1cRUxxGf0">
+<div class="layout" data-page-node-id="9qaIfv8alaEh40nrQBgMo4">
+  <div class="nav-mask" id="navMask" onclick="closeNav()" data-page-node-id="Q6ut7ZTT7SFQ4H3xJNOZYv"></div>
+  <aside class="sidebar" id="sidebar" data-page-node-id="C40Fm5EgeWfFPbhzjBVlEP">
+    <div class="side-logo" data-page-node-id="zg3GGLHvT928oXKMYHKDSg"><span class="em" id="logoEm" data-page-node-id="gLozPXHggMoS5HJHwJkAEb">🌸</span><span id="logoName" data-page-node-id="LjcmnzVbx1MqZw0MaVFb3H">茜茜</span><button class="nav-close" onclick="closeNav()" title="收起菜单" data-page-node-id="lAJtQYaQW57IJzUGdupAF6">✕</button></div>
+    <div id="navList" data-page-node-id="MJlwvZIIEIAb6bGRnoReNk"></div>
   </aside>
-  <main class="main">
-    <div class="topbar" id="topbar"></div>
-    <div id="pageBox"></div>
+  <main class="main" data-page-node-id="iOvx29eC3Q3wH2CeOJea3r">
+    <div class="topbar" id="topbar" data-page-node-id="wE4DP4zp6IEx7R888BYhlo"></div>
+    <div id="pageBox" data-page-node-id="AAGVb4xsWmmA95YWCLK5r9"></div>
   </main>
 </div>
-<div class="mask" id="mask"><div class="modal" id="modalBox"></div></div>
-<div class="auth-gate" id="authGate"><div class="ml-stage" id="mlStage"></div></div>
+<div class="mask" id="mask" onclick="if(event.target===this)closeModal()" data-page-node-id="EUC1v8EaqnJy9tP4C5LA7R"><div class="modal" id="modalBox" data-page-node-id="DuveYSK0XPCdX2fQAOHZKx"></div></div>
+<div class="auth-gate" id="authGate" data-page-node-id="zWtUYQ6pUuXDlCRQeORbXm"><div class="ml-stage" id="mlStage" data-page-node-id="eAcFlri1jpYtLevwrN7Glo"></div></div>
 
 <script>
 /* ============================================================
@@ -1047,7 +1064,7 @@ let   DBK=DBK_BASE;                // 当前登录账号的存档键（登录后
 let   DBK_SNAP=DBK+"_snap";        // 自动快照：上一版数据
 let   DBK_SNAP2=DBK+"_snap2";      // 自动快照：上上一版
 let   DBK_TIME=DBK+"_saved";       // 上次保存时间
-const APP_VER="1.9.25";             // App 版本号（备份文件里会写上）
+const APP_VER="1.9.26";             // App 版本号（备份文件里会写上）
 const $=s=>document.querySelector(s);
 
 /* ============================================================
@@ -2182,6 +2199,8 @@ function defaultDB(){
     sound:true,                   // 🔊 音效开关
     skin:{bg:"pink",icon:"default",frame:"solid"}, // 🎨 皮肤：背景色 / 图标风格 / 框架样式
     practice:{},                  // 📝 练习存档：{math_oral:{ds,ps,ans,graded,right}, math_think:{ds,qs,idx,ans,review}, math_mul:{ds,end,right}}
+    ziRecords:{},                 // ✍️ 生字描字记录 {字:[{ds,score,stars}]}
+    followScores:{},              // 🎤 跟读自评记录 {key:[{ds,star}]}
     logs:[],
   };
 }
@@ -2601,6 +2620,7 @@ function openZiPractice(i){
       </div>
       <div class="zg-guidetxt">👆 用手指在田字格里照着浅灰色的字描一描；先看「看笔顺」知道每一笔怎么写。</div>
       <div class="zg-score" id="zgScore"></div>
+      <div id="ziLogBox">${ziRecordsHTML(ch)}</div>
       <div class="zg-tools">
         <button class="btn btn-green btn-sm" data-snd="ok" onclick="ziGrade()">✅ 提交批改</button>
         <button class="btn btn-grey btn-sm" data-snd="tap" onclick="closeModal()">关闭</button>
@@ -2650,6 +2670,25 @@ function ziListenWord(){
   const w=window._ziWord||"", s=window._ziSent||"";
   speak("组词："+w+"。造句："+s,"zh-CN");
 }
+/* v1.9.26：描字记录落盘 + 百分制得分 */
+function ziBest(ch){ try{ const a=(db.ziRecords&&db.ziRecords[ch])||[]; return a.length?Math.max.apply(null,a.map(x=>x.score||0)):0; }catch(e){ return 0; } }
+function ziRecordsHTML(ch){
+  let arr=[]; try{ arr=(db.ziRecords&&db.ziRecords[ch])||[]; }catch(e){}
+  if(!arr.length) return `<div class="zi-log">📝 还没有描字记录，写完点「提交批改」就会把得分记下来啦～</div>`;
+  const best=Math.max.apply(null,arr.map(x=>x.score||0));
+  const recent=arr.slice(-3).reverse().map(x=>x.ds.slice(5)+" "+x.score+"分").join(" · ");
+  return `<div class="zi-log">🏆「${esc(ch)}」最高 <b>${best}</b> 分 · 已描 ${arr.length} 次<br>最近：${recent}</div>`;
+}
+function ziRecordSave(ch,score,stars){
+  try{
+    if(!db.ziRecords) db.ziRecords={};
+    const arr=db.ziRecords[ch]||(db.ziRecords[ch]=[]);
+    arr.push({ds:today(),score:score,stars:stars});
+    if(arr.length>8) arr.shift();
+    saveDB();
+    const box=document.getElementById("ziLogBox"); if(box) box.innerHTML=ziRecordsHTML(ch);
+  }catch(e){}
+}
 /* 提交批改：把用户描红与标准笔顺做像素重合度评分（ generous，鼓励为主） */
 function ziGrade(){
   const ch=window._ziChar||ziPath(_ziIdx)[0];
@@ -2673,9 +2712,11 @@ function ziGrade(){
       if(tgt[i+3]>40){ tot++; if(usr[i+3]>30) hit++; }
     }
     const rate=tot?hit/tot:0;
+    const score=Math.max(50,Math.min(100,Math.round(50+rate*100)));
     let stars = rate>=0.5?3:(rate>=0.28?2:1);
     let msg = rate>=0.5?"写得非常棒！笔画都对准啦":(rate>=0.28?"写得不错哦，再描一遍会更漂亮":"勇敢尝试啦！跟着笔顺再写一次试试");
-    sc.textContent=msg+" "+"⭐".repeat(stars);
+    sc.innerHTML=`得分 <b style="font-size:19px;color:#c9317e">${score}</b> 分　${"⭐".repeat(stars)}${"☆".repeat(3-stars)}<br><span style="font-size:12px;color:var(--sub)">${msg}</span>`;
+    ziRecordSave(ch,score,stars);
     if(rate>=0.5) sfx("ok"); else sfx("tap");
   }catch(e){ sc.textContent="写好啦！真棒 ⭐⭐⭐"; sfx("ok"); }
 }
@@ -2948,6 +2989,7 @@ function fbBegin(k){
 }
 function fbStop(k){
   if(_fbRec.key!==k) return;
+  try{ window._fbDur=window._fbDur||{}; window._fbDur[k]=(Date.now()-_fbRec.start)/1000; }catch(e){}
   if(_fbRec.cd){ clearInterval(_fbRec.cd); _fbRec.cd=0; }
   try{ if(_fbRec.mr&&_fbRec.mr.state!=="inactive") _fbRec.mr.stop(); }catch(e){}
 }
@@ -3030,9 +3072,51 @@ function fbCompare(k){
     const o=_fbOut(k); if(o) o.innerHTML=`<div class="follow-msg">🎧 ② 再听你读的…</div>`;
     fbPlayMine(k);
     setTimeout(()=>{ const o2=_fbOut(k);
-      if(o2 && o2.innerHTML.indexOf("②")>=0) o2.innerHTML=`<div class="follow-fix">🔁 比一比像不像？想更标准就再点「🔊 朗读」听一遍，然后「🎤 重录」再读一次～</div>`;
+      if(o2 && o2.innerHTML.indexOf("②")>=0) o2.innerHTML=`<div class="follow-fix">🔁 比一比像不像？想更标准就再点「🔊 朗读」听一遍，然后「🎤 重录」再读一次～</div>`+fbScoreHTML(k);
     }, Math.max(2200, _speakMs(txt, inf.lang)*0.8));
   }, dly);
+}
+/* ===== v1.9.26 跟读评分：不依赖语音识别（苹果无 webkitSpeechRecognition），
+   用「录音时长 vs 标准朗读时长的接近度」给完整度参考分，再让孩子/家长自评星级 ===== */
+function fbRefScore(k){
+  try{
+    const inf=window._fbTxt[k]; const dur=Number((window._fbDur&&window._fbDur[k])||0);
+    const ref=inf?_speakMs(String(inf.t||""),inf.lang):0;
+    if(!dur||!ref) return 0;
+    const r=dur/ref;
+    if(r<0.45) return 40;        // 太短：多半没读完
+    if(r<0.7)  return 70;
+    if(r<=1.6) return 95;        // 接近标准：完整流畅
+    if(r<=2.4) return 78;
+    return 60;                   // 停顿偏多
+  }catch(e){ return 0; }
+}
+function fbSelfRate(k,star){
+  star=Math.max(1,Math.min(5,Number(star)||3));
+  try{
+    if(!db.followScores) db.followScores={};
+    const arr=db.followScores[k]||(db.followScores[k]=[]);
+    arr.push({ds:today(),star:star});
+    if(arr.length>10) arr.shift();
+    saveDB();
+  }catch(e){}
+  const out=_fbOut(k);
+  if(out) out.innerHTML=`<div class="follow-fix">🌟 记下啦！你给自己打了 ${star} 颗星。${star>=4?"读得很棒，继续保持！":"多听几遍标准读音，下次会更棒～"}</div>`;
+  sfx(star>=4?"coin":"ok");
+}
+function fbScoreHTML(k){
+  const ref=fbRefScore(k);
+  const stars=ref>=90?5:(ref>=75?4:(ref>=60?3:2));
+  let hist=[]; try{ hist=(db.followScores&&db.followScores[k])||[]; }catch(e){}
+  const last=hist.length?hist[hist.length-1].star:0;
+  const tip=ref>=90?"读得又完整又流畅，真棒！":(ref>=60?"读得不错，跟着标准音的节奏再来一遍～":"是不是没读完，或者中间停得久？再读一次试试～");
+  return `<div class="follow-scorecard">
+    <div class="follow-score"><span>🗣️ 朗读评分</span><span class="follow-stars">${"★".repeat(stars)}${"☆".repeat(5-stars)}</span><span class="follow-pct">${ref||"—"}分</span></div>
+    <div class="follow-bar"><i style="width:${ref||0}%"></i></div>
+    <div class="follow-tips">${tip}<br>这是按你读的时长和完整度给的参考分；听听上面的对比，你觉得读得怎么样？</div>
+    <div class="follow-selftitle">${last?"上次自评："+"★".repeat(last)+"　":""}我来打分：</div>
+    <div class="follow-btns">${[1,2,3,4,5].map(n=>`<button class="btn btn-grey btn-sm" data-snd="tap" onclick="fbSelfRate('${k}',${n})">${n}星</button>`).join("")}</div>
+  </div>`;
 }
 function dailyOral(ds){
   const g=gradeOf(curVol("math")); const r=rngFor(ds+"oral"); const out=[]; let guard=0;
@@ -3246,12 +3330,22 @@ function showMoney(n,txt){
   el.style.left=(window.innerWidth/2-24)+"px"; el.style.top="90px";
   document.body.appendChild(el); setTimeout(()=>el.remove(),1100);
 }
-function showModal(html){ $("#modalBox").innerHTML=html; $("#mask").style.display="flex"; }
+function showModal(html){
+  $("#modalBox").innerHTML='<button class="modal-x" data-snd="tap" aria-label="关闭" onclick="closeModal()">✕</button>'+html;
+  $("#mask").style.display="flex";
+}
 function closeModal(){
   $("#mask").style.display="none";
   window._mulState=null;
   if(window._mulTimer){ clearTimeout(window._mulTimer); window._mulTimer=null; }
 }
+/* v1.9.26：弹窗要能退出——点遮罩空白处 / 按返回键(ESC) 都关闭 */
+(function bindModalClose(){
+  try{
+    document.addEventListener("click",function(e){ if(e && e.target && e.target.id==="mask") closeModal(); });
+    document.addEventListener("keydown",function(e){ if(e && (e.key==="Escape"||e.keyCode===27)) closeModal(); });
+  }catch(err){}
+})();
 /* 通用确认框：用 App 内弹窗代替系统 confirm（部分浏览器 / 内嵌预览会禁用系统弹窗，导致「点了没反应」） */
 window._askYes=null;
 function askConfirm(msg, onYes, yesLabel){
@@ -4345,7 +4439,7 @@ function subPage(key){
      const ziUnits=list.filter(u=>u&&u.u&&u.u.indexOf("识字")>=0);
      return subBar()+`
     <div class="card"><h3>🅰️ 今日生字 10 个（${volLabel(curVol("cn"))}）</h3>
-      <div class="grid5">${zi.map((z,i)=>`<div class="zi-card" data-snd="play" onclick="openZiPractice(${i})"><div class="py">${z[1]}</div><div class="zi">${z[0]}</div><div class="cz">${z[2]}</div></div>`).join("")}</div>
+      <div class="grid5">${zi.map((z,i)=>`<div class="zi-card" data-snd="play" onclick="openZiPractice(${i})"><div class="py">${z[1]}</div><div class="zi">${z[0]}</div><div class="cz">${z[2]}</div>${ziBest(z[0])?`<span class="zi-badge">${ziBest(z[0])}分</span>`:""}</div>`).join("")}</div>
       <div style="color:var(--sub);font-size:12px;margin-top:10px">👆 点生字 → 笔顺 / 田字格描红 / 听组词造句</div>
       ${followBox("cn_zi",zi.map(z=>z[0]).join(""),"跟读今天的 10 个生字")}</div>
     ${ziUnits.length?`<div class="card"><h3>📚 本册识字表</h3>${ziUnits.map(u=>`<div class="know-u"><div class="ku">${u.u}</div>${(u.p||[]).map(p=>`<div class="kp">· ${p}</div>`).join("")}</div>`).join("")}</div>`:""}`;
@@ -4637,7 +4731,7 @@ cn(){
       ${followBox("cn_story",story.x,"跟读今天的故事")}</div>
     <div class="card"><h3>✍️ 今日生字 10 个（${volLabel(curVol("cn"))}）${isDone("cn_zi")?'<span class="tag done">✓</span>':""}</h3>
       <div class="grid5">${zi.map((z,i)=>`
-        <div class="zi-card" data-snd="play" onclick="openZiPractice(${i})"><div class="py">${z[1]}</div><div class="zi">${z[0]}</div><div class="cz">${z[2]}</div></div>`).join("")}</div>
+        <div class="zi-card" data-snd="play" onclick="openZiPractice(${i})"><div class="py">${z[1]}</div><div class="zi">${z[0]}</div><div class="cz">${z[2]}</div>${ziBest(z[0])?`<span class="zi-badge">${ziBest(z[0])}分</span>`:""}</div>`).join("")}</div>
       <div style="color:var(--sub);font-size:12px;margin:10px 0">👆点生字 → 看笔顺、田字格描红、听组词造句，写完打卡～</div>
       <button class="btn btn-green btn-sm" ${isDone("cn_zi")?"disabled":""} data-snd="ok" onclick="completeTask('cn_zi')">✅ 练完 10 个啦</button>
       ${followBox("cn_zi",zi.map(z=>z[0]).join(""),"跟读今天的 10 个生字")}</div>
